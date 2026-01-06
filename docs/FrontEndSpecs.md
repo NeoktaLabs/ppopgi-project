@@ -1,6 +1,6 @@
 # Neokta Lottery — Frontend Specification (Full Contract Coverage)
 
-This document tells a web developer **exactly** what to build to ship a **smooth, non-technical** lottery UI on **Etherlink (Tezos L2)**.
+This document tells a web developer **exactly** what to build to ship a **smooth, non-technical** lottery UI on **Etherlink Mainnet (Tezos L2)**.
 
 It maps **1:1** to the current smart contracts:
 
@@ -26,6 +26,7 @@ It maps **1:1** to the current smart contracts:
 - [10. Error-to-copy mapping (non-technical text)](#10-error-to-copy-mapping-non-technical-text)
 - [11. No-indexer strategy](#11-no-indexer-strategy)
 - [12. Developer checklist (100% feature mapping)](#12-developer-checklist-100-feature-mapping)
+- [13. Technical & Compliance Requirements (Critical)](#13-technical--compliance-requirements-critical)
 
 ---
 
@@ -530,12 +531,32 @@ Provide a search box:
 
 ---
 
-### Appendix: UX microcopy examples (ready-to-use)
+## 13. Technical & Compliance Requirements (Critical)
 
-- **Approve USDC (creator)**: “Allow Neokta to move your prize pot (USDC) into the lottery. You can revoke this anytime.”
-- **Approve USDC (buyer)**: “Allow Neokta to buy tickets using USDC.”
-- **Finalize**: “Draw winner” / subtitle “Requires a small randomness fee.”
-- **Claim**: “Claim to wallet”
-- **Canceled**: “This lottery didn’t reach the minimum tickets. Refunds are now available.”
-- **Drawing**: “We’re drawing the winner. This usually takes a moment.”
+### 13.1 Network Enforcement (Etherlink Mainnet)
+The dApp must strictly enforce the **Etherlink Mainnet** network.
+- **Chain ID:** `42793`
+- **Behavior:** If the user's wallet is connected to a different chain, **all** transaction buttons (Create, Buy, Finalize, Claim) must change to a **"Switch to Etherlink"** button that triggers the wallet network switch request.
 
+### 13.2 Contract Addresses (Verification Required)
+The developer must verify these addresses against official documentation before hardcoding:
+* **Pyth Entropy:** `0x2880aB155794e7179c9eE2e38200202908C17B43`
+* **Pyth Provider:** `0x52DeaA1c84233F7bb8C8A45baeDE41091c616506`
+* **USDC:** `0x796Ea11Fa2dD751eD01b53C372fFDB4AAa8f00F9` (Canonical Bridged USDC).
+
+### 13.3 Terms of Service (TOS) Gate
+- **Create Page:** Add a mandatory checkbox: *"I agree to the Terms of Service and confirm I am legally eligible to create a lottery."* The "Create Lottery" button is disabled until checked.
+- **Buy Module:** Add a mandatory checkbox: *"I agree to the Terms of Service."* The "Buy Tickets" button is disabled until checked.
+
+### 13.4 "Max Tickets" Race Condition Handling
+In the **Buy Tickets** module, the UI must prevent users from trying to buy more tickets than are available.
+- **Logic:**
+  `available = (maxTickets > 0) ? (maxTickets - getSold()) : infinity`
+- **Constraint:**
+  If the user inputs a number > `available`, the UI must automatically cap the input to `available` and show a helper text: *"Only X tickets remaining."*
+- **Why:** This prevents failed transactions and wasted gas for your users.
+
+### 13.5 Data Formatting Standards
+- **USDC (Inputs/Outputs):** Always convert user input to **6 decimals** before sending to blockchain (`amount * 10^6`).
+- **XTZ (Fees/Refunds):** Always treat native currency as **18 decimals**.
+- **Timestamps:** Contract returns Unix timestamps (seconds). Convert to local user time for display.
