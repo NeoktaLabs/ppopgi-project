@@ -7,17 +7,17 @@ pragma solidity ^0.8.24;
  *
  * Core properties:
  * - ONE contract instance = ONE lottery.
- * - Pull-based payouts (winner/creator/feeRecipient withdraw) to avoid push-payment risk.
- * - Permissionless finalization: anyone can call finalize() when eligible.
- * - If entropy callback never arrives, an emergency hatch allows cancellation after a delay.
+ * - Pull-based payouts (winner/creator/protocol must withdraw) to avoid push-payment risk.
+ * - Permissionless finalization: anyone can call finalize when eligible.
+ * - If entropy callback never arrives, an emergency hatch lets you cancel after a delay.
+ *
+ * Funding model (fixes approval paradox):
+ * - This contract is deployed in FundingPending state.
+ * - The Deployer transfers `winningPot` USDC into this contract.
+ * - The Deployer calls confirmFunding() once.
  *
  * Etherlink assumptions:
  * - USDC has 6 decimals.
- *
- * Fee routing (important):
- * - Admin control (pause, entropy updates, etc.) is held by the Safe (owner()).
- * - Protocol fees are NOT allocated to the Safe; they are allocated to feeRecipient.
- * - feeRecipient is configurable by the Safe (not hardcoded).
  */
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -41,8 +41,8 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     error InvalidEntropy();
     error InvalidProvider();
     error InvalidUSDC();
-    error InvalidCreator();
     error InvalidFeeRecipient();
+    error InvalidCreator();
     error NameEmpty();
     error NameTooLong();
     error DurationTooShort();
@@ -78,6 +78,9 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     error EthRefundFailed();
     error AccountingMismatch();
     error Wait24Hours();
+    error NotDeployer();
+    error NotFundingPending();
+    error FundingMismatch();
 
     // -----------------------------
     // Events
@@ -104,21 +107,13 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     event EntropyContractUpdated(address newContract);
     event GovernanceLockUpdated(uint256 activeDrawings);
 
-    /// @notice Protocol fee recipient changed.
-    event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    /// @notice Emitted when claimable balances are allocated (great for UX/indexers).
+    /// @dev reason codes (suggestion):
+    /// 1 = WinnerPrize, 2 = CreatorRevenue, 3 = TicketRefund, 4 = ProtocolFee, 5 = CreatorPotRefund
+    event PrizeAllocated(address indexed user, uint256 amount, uint8 indexed reason);
 
-    /**
-     * @notice Optional UX/indexing event:
-     * Emitted whenever funds are allocated to someone’s claimable balance.
-     *
-     * reason codes:
-     * 1 = WinnerPrize
-     * 2 = CreatorRevenue
-     * 3 = ProtocolFee
-     * 4 = CreatorPotRefund (cancel)
-     * 5 = TicketRefund (cancel)
-     */
-    event PrizeAllocated(address indexed user, uint256 amount, uint8 reason);
+    /// @notice Emitted once when pot funding is confirmed.
+    event FundingConfirmed(address indexed funder, uint256 amount);
 
     // -----------------------------
     // Immutables / Config
@@ -133,15 +128,18 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     /// @notice Lottery creator (end-user who funded the pot).
     address public immutable creator;
 
+    /// @notice Protocol fee recipient (external wallet, not necessarily the owner/Safe).
+    address public immutable feeRecipient;
+
+    /// @notice Deployer that created this lottery instance (allowed to call confirmFunding()).
+    address public immutable deployer;
+
     /// @notice Entropy contract/provider (admin-updatable by owner if no active drawings).
     IEntropy public entropy;
     address public entropyProvider;
 
-    /// @notice Protocol fee percent (max 20). Allocated to feeRecipient.
+    /// @notice Protocol fee percent (max 20). Snapshot at deployment.
     uint256 public protocolFeePercent = 5;
-
-    /// @notice External wallet that receives protocol fees (NOT the Safe owner).
-    address public feeRecipient;
 
     // -----------------------------
     // Limits
@@ -166,10 +164,8 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
      * Intended invariant:
      *   totalReservedUSDC <= usdcToken.balanceOf(address(this))
      *
-     * Increases when USDC enters the contract (pot + ticket purchases),
-     * decreases only when USDC leaves the contract via withdrawFunds().
-     *
-     * This is a defensive “bug detector”.
+     * Increases when USDC enters the contract (pot funding + ticket purchases),
+     * decreases only when USDC leaves via withdrawFunds().
      */
     uint256 public totalReservedUSDC;
 
@@ -182,7 +178,7 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     // -----------------------------
     // Lottery State
     // -----------------------------
-    enum Status { Open, Drawing, Completed, Canceled }
+    enum Status { FundingPending, Open, Drawing, Completed, Canceled }
     Status public status;
 
     string public name;
@@ -223,7 +219,7 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     // Pull-based balances
     // -----------------------------
     mapping(address => uint256) public claimableFunds; // USDC
-    mapping(address => uint256) public claimableEth;   // native refunds
+    mapping(address => uint256) public claimableEth;   // ETH refunds
 
     bool public creatorPotRefunded; // prevents double allocation on cancel
 
@@ -235,8 +231,8 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         address _usdcToken,
         address _entropy,
         address _entropyProvider,
-        address _creator,
         address _feeRecipient,
+        address _creator,
         string memory _name,
         uint256 _ticketPrice,
         uint256 _winningPot,
@@ -245,15 +241,17 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         uint64 _durationSeconds,
         uint32 _minPurchaseAmount
     )
-        // Deployer is initial owner; deployer will transfer to Safe immediately after deployment.
-        Ownable(msg.sender)
+        Ownable(msg.sender) // deployer is initial owner; deployer will transfer to Safe later
     {
+        // Who deployed this instance (the deployer contract)
+        deployer = msg.sender;
+
         if (_registry == address(0)) revert InvalidRegistry();
         if (_entropy == address(0)) revert InvalidEntropy();
         if (_usdcToken == address(0)) revert InvalidUSDC();
         if (_entropyProvider == address(0)) revert InvalidProvider();
-        if (_creator == address(0)) revert InvalidCreator();
         if (_feeRecipient == address(0)) revert InvalidFeeRecipient();
+        if (_creator == address(0)) revert InvalidCreator();
 
         // Validate USDC decimals = 6
         try IERC20Metadata(_usdcToken).decimals() returns (uint8 d) {
@@ -282,8 +280,8 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         usdcToken = IERC20(_usdcToken);
         entropy = IEntropy(_entropy);
         entropyProvider = _entropyProvider;
-        creator = _creator;
         feeRecipient = _feeRecipient;
+        creator = _creator;
 
         // Initialize state
         name = _name;
@@ -296,18 +294,46 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         maxTickets = _maxTickets;
         minPurchaseAmount = _minPurchaseAmount;
 
+        // IMPORTANT:
+        // We do NOT pull USDC from creator here. The Deployer will fund this contract,
+        // then call confirmFunding() one time.
+        status = Status.FundingPending;
+    }
+
+    // -----------------------------
+    // Funding (one-time, deployer-only)
+    // -----------------------------
+
+    /**
+     * @notice One-time activation step.
+     * @dev Called by the deployer AFTER it transfers `winningPot` USDC into this contract.
+     * This avoids the "approval paradox" of trying to transferFrom an address that can't
+     * approve a contract that doesn't exist yet.
+     */
+    function confirmFunding() external {
+        if (msg.sender != deployer) revert NotDeployer();
+        if (status != Status.FundingPending) revert NotFundingPending();
+
+        // Ensure the pot is actually present.
+        // Since this is a fresh instance, the most sensible check is:
+        //   balance >= winningPot
+        // (Some tokens may take fees, but USDC should not. If you ever used a fee token,
+        // this would revert and protect users from underfunded lotteries.)
+        uint256 bal = usdcToken.balanceOf(address(this));
+        if (bal < winningPot) revert FundingMismatch();
+
+        // Set liability accounting for the pot.
+        totalReservedUSDC = winningPot;
+
+        // Now the lottery becomes Open for ticket sales.
         status = Status.Open;
 
-        // Pull the pot from creator into this contract at deployment time.
-        // Creator must approve USDC to THIS lottery address (created in the same transaction).
-        usdcToken.safeTransferFrom(_creator, address(this), _winningPot);
-        totalReservedUSDC += _winningPot;
+        emit FundingConfirmed(msg.sender, winningPot);
     }
 
     // -----------------------------
     // Views / helpers
     // -----------------------------
-
     function getSold() public view returns (uint256) {
         uint256 len = ticketRanges.length;
         return len == 0 ? 0 : ticketRanges[len - 1].upperBound;
@@ -327,42 +353,40 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     // -----------------------------
     // Buying tickets
     // -----------------------------
-
-    /**
-     * @notice Buy `count` tickets.
-     *
-     * Anti-spam / storage control:
-     * - Each buyer gets a “range” appended when they are not the last buyer.
-     * - Creating a NEW range requires at least $1 cost (MIN_NEW_RANGE_COST).
-     * - If buyer is already the last buyer, we extend their last range without adding storage.
-     *
-     * Security pattern:
-     * - CEI (Checks -> Effects -> Interactions): we update contract state first,
-     *   and call the external USDC contract last.
-     */
     function buyTickets(uint256 count) external nonReentrant whenNotPaused {
-        // -------- CHECKS --------
+        if (status != Status.Open) revert LotteryNotOpen();
+
         if (count == 0) revert InvalidCount();
         if (count > MAX_BATCH_BUY) revert BatchTooLarge();
-        if (status != Status.Open) revert LotteryNotOpen();
         if (block.timestamp >= deadline) revert LotteryExpired();
         if (msg.sender == creator) revert CreatorCannotBuy();
+
         if (minPurchaseAmount > 0 && count < minPurchaseAmount) revert BatchTooSmall();
 
         uint256 currentSold = getSold();
         uint256 newTotal = currentSold + count;
+
         if (newTotal > type(uint96).max) revert Overflow();
         if (maxTickets > 0 && newTotal > maxTickets) revert TicketLimitReached();
 
         uint256 totalCost = ticketPrice * count;
 
-        bool returning = (ticketRanges.length > 0 && ticketRanges[ticketRanges.length - 1].buyer == msg.sender);
+        bool returning =
+            (ticketRanges.length > 0 && ticketRanges[ticketRanges.length - 1].buyer == msg.sender);
+
         if (!returning) {
             if (ticketRanges.length >= MAX_RANGES) revert TooManyRanges();
             if (totalCost < MIN_NEW_RANGE_COST) revert BatchTooCheap();
         }
 
-        // -------- EFFECTS --------
+        // -----------------------------
+        // CEI pattern:
+        // 1) Checks done above
+        // 2) Effects (state updates)
+        // 3) Interactions (token transfer) last
+        // -----------------------------
+
+        // Effects: update accounting + state
         totalReservedUSDC += totalCost;
         ticketRevenue += totalCost;
 
@@ -376,25 +400,13 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
 
         emit TicketsPurchased(msg.sender, count, totalCost, newTotal);
 
-        // -------- INTERACTIONS (external call LAST) --------
-        // If this transfer fails, the entire tx reverts and state changes above are reverted too.
+        // Interaction: collect payment last (tx reverts if transfer fails, rolling back state)
         usdcToken.safeTransferFrom(msg.sender, address(this), totalCost);
     }
 
     // -----------------------------
     // Finalization (request randomness)
     // -----------------------------
-
-    /**
-     * @notice Finalize once:
-     * - maxTickets reached OR deadline passed
-     *
-     * If deadline passed and minTickets not reached:
-     * - cancel and refund creator pot (creator must withdraw)
-     *
-     * ANYONE can call finalize when eligible (permissionless).
-     * This supports automation bots without changing trust assumptions.
-     */
     function finalize() external payable nonReentrant whenNotPaused {
         if (status != Status.Open) revert LotteryNotOpen();
         if (entropyRequestId != 0) revert RequestPending();
@@ -417,7 +429,6 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         drawingRequestedAt = uint64(block.timestamp);
         selectedProvider = entropyProvider;
 
-        // Governance lock: blocks entropy config changes mid-draw.
         activeDrawings += 1;
         emit GovernanceLockUpdated(activeDrawings);
 
@@ -432,7 +443,7 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
 
         entropyRequestId = requestId;
 
-        // Refund overpayment (pull-based fallback if direct refund fails)
+        // Refund ETH overpayment (pull-based fallback if direct refund fails)
         if (msg.value > fee) {
             uint256 refund = msg.value - fee;
             (bool ok, ) = payable(msg.sender).call{value: refund}("");
@@ -449,14 +460,13 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     // -----------------------------
     // Entropy callback => pick winner
     // -----------------------------
-
     function entropyCallback(uint64 sequenceNumber, address provider, bytes32 randomNumber) external override {
         if (msg.sender != address(entropy)) revert UnauthorizedCallback();
         _resolve(sequenceNumber, provider, randomNumber);
     }
 
     function _resolve(uint64 seq, address provider, bytes32 rand) internal {
-        // Reject unknown/mismatched callbacks without reverting (prevents callback grief).
+        // If request doesn't match current pending request, reject without reverting
         if (entropyRequestId == 0 || seq != entropyRequestId) {
             emit CallbackRejected(seq, 1);
             return;
@@ -473,7 +483,7 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
             return;
         }
 
-        // Clear request first (state hygiene)
+        // Clear request before further effects
         entropyRequestId = 0;
 
         // Unlock governance lock
@@ -493,9 +503,9 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         uint256 feeRev = (ticketRevenue * protocolFeePercent) / 100;
 
         // Allocate (pull payments)
-        uint256 winnerAmt = (winningPot - feePot);
-        claimableFunds[w] += winnerAmt;
-        emit PrizeAllocated(w, winnerAmt, 1);
+        uint256 winnerAmount = (winningPot - feePot);
+        claimableFunds[w] += winnerAmount;
+        emit PrizeAllocated(w, winnerAmount, 1);
 
         uint256 creatorNet = ticketRevenue - feeRev;
         if (creatorNet > 0) {
@@ -504,12 +514,14 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         }
 
         // Protocol fees go to feeRecipient (external wallet)
-        uint256 protocolAmt = feePot + feeRev;
-        claimableFunds[feeRecipient] += protocolAmt;
-        emit PrizeAllocated(feeRecipient, protocolAmt, 3);
+        uint256 protocolAmount = feePot + feeRev;
+        if (protocolAmount > 0) {
+            claimableFunds[feeRecipient] += protocolAmount;
+            emit PrizeAllocated(feeRecipient, protocolAmount, 4);
+        }
 
         emit WinnerPicked(w, winningIndex, total);
-        emit ProtocolFeesCollected(protocolAmt);
+        emit ProtocolFeesCollected(protocolAmount);
     }
 
     /**
@@ -530,7 +542,6 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     // -----------------------------
     // Cancel & Refund paths
     // -----------------------------
-
     function cancel() external nonReentrant {
         if (status != Status.Open) revert CannotCancel();
         if (block.timestamp < deadline) revert CannotCancel();
@@ -565,10 +576,10 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         selectedProvider = address(0);
         drawingRequestedAt = 0;
 
-        // Clear pending entropy request
+        // If there was a pending entropy request, clear it
         entropyRequestId = 0;
 
-        // Unlock lock (drawing no longer active)
+        // Unlock lock if needed
         if (activeDrawings > 0) {
             activeDrawings = 0;
             emit GovernanceLockUpdated(activeDrawings);
@@ -579,8 +590,8 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
             creatorPotRefunded = true;
 
             claimableFunds[creator] += winningPot;
+            emit PrizeAllocated(creator, winningPot, 5);
             emit RefundAllocated(creator, winningPot);
-            emit PrizeAllocated(creator, winningPot, 4);
         }
 
         emit LotteryCanceled(reason);
@@ -599,14 +610,13 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         ticketsOwned[msg.sender] = 0;
 
         claimableFunds[msg.sender] += refund;
+        emit PrizeAllocated(msg.sender, refund, 3);
         emit RefundAllocated(msg.sender, refund);
-        emit PrizeAllocated(msg.sender, refund, 5);
     }
 
     // -----------------------------
     // Withdrawals (pull model)
     // -----------------------------
-
     function withdrawFunds() external nonReentrant {
         uint256 amount = claimableFunds[msg.sender];
         if (amount == 0) revert NothingToClaim();
@@ -614,7 +624,7 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
         claimableFunds[msg.sender] = 0;
         totalReservedUSDC -= amount;
 
-        // Invariant check (bug detector)
+        // Invariant check
         if (totalReservedUSDC > usdcToken.balanceOf(address(this))) revert AccountingMismatch();
 
         usdcToken.safeTransfer(msg.sender, amount);
@@ -638,26 +648,10 @@ contract LotterySingleWinner is Ownable, IEntropyConsumer, ReentrancyGuard, Paus
     // -----------------------------
     // Admin knobs (Safe-owned)
     // -----------------------------
-
-    /**
-     * @notice Update protocol fee percent (max 20%).
-     * @dev Only owner (Safe).
-     */
     function setProtocolFee(uint256 p) external onlyOwner {
         if (p > 20) revert FeeTooHigh();
         protocolFeePercent = p;
         emit ProtocolFeeUpdated(p);
-    }
-
-    /**
-     * @notice Update protocol fee recipient (external treasury wallet).
-     * @dev Only owner (Safe). Not hardcoded; can rotate if needed.
-     */
-    function setFeeRecipient(address newRecipient) external onlyOwner {
-        if (newRecipient == address(0)) revert InvalidFeeRecipient();
-        address old = feeRecipient;
-        feeRecipient = newRecipient;
-        emit FeeRecipientUpdated(old, newRecipient);
     }
 
     function setEntropyProvider(address p) external onlyOwner {

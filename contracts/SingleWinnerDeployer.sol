@@ -6,28 +6,26 @@ pragma solidity ^0.8.24;
  * @notice
  * Deploys LotterySingleWinner instances and registers them in the LotteryRegistry.
  *
- * Key points:
- * - This contract must be authorized as a registrar in the LotteryRegistry.
- * - Users call createSingleWinnerLottery(...) here.
- * - This deployer:
- *    1) deploys a new LotterySingleWinner instance
- *    2) transfers ownership of the lottery to the Safe (admin knobs)
- *    3) registers the lottery in the registry (typeId = 1)
+ * IMPORTANT FIX (Approval Paradox):
+ * - We DO NOT pull USDC in the lottery constructor from the end-user.
+ * - Instead, the end-user approves THIS Deployer for `winningPot`.
+ * - The Deployer deploys the Lottery, then transfers USDC from user -> Lottery,
+ *   then calls lottery.confirmFunding() to activate it.
  *
- * Fee routing:
- * - Protocol fees do NOT go to the Safe multisig.
- * - Protocol fees are allocated to feeRecipient (external wallet),
- *   while admin control remains on the Safe (owner).
- *
- * Why deployer contract:
- * - The registry stays minimal and doesn't import lottery implementations.
- * - You can add new lottery types later by deploying new deployers and authorizing them.
+ * Why this design:
+ * - No CREATE2 tricks needed.
+ * - Keeps Registry "forever contract" minimal (no imports / no knowledge of types).
+ * - Keeps UX manageable: creators do "Approve + Create" (standard ERC20 pattern).
  */
+
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./LotteryRegistry.sol";
 import "./LotterySingleWinner.sol";
 
 contract SingleWinnerDeployer {
+    using SafeERC20 for IERC20;
+
     // -----------------------------
     // Errors
     // -----------------------------
@@ -38,9 +36,7 @@ contract SingleWinnerDeployer {
     // Events
     // -----------------------------
     event DeployerOwnershipTransferred(address indexed oldOwner, address indexed newOwner);
-
-    /// @notice Emitted when deployer-level config changes.
-    event ConfigUpdated(address usdc, address entropy, address provider, address safeOwner, address feeRecipient);
+    event ConfigUpdated(address usdc, address entropy, address provider, address feeRecipient);
 
     // -----------------------------
     // Ownership (owner should be your Safe)
@@ -53,85 +49,74 @@ contract SingleWinnerDeployer {
     }
 
     // -----------------------------
-    // Immutable / core wiring
+    // Configuration (shared across all SingleWinner lotteries)
     // -----------------------------
+
+    /// @notice Registry where lotteries are registered.
     LotteryRegistry public immutable registry;
 
-    /// @notice Numeric type id for this deployer’s lotteries.
+    /// @notice The Safe that will become the owner of each lottery instance (admin knobs).
+    address public immutable safeOwner;
+
+    /// @notice Single Winner numeric type ID (choose any convention; 1 is common).
     uint256 public constant SINGLE_WINNER_TYPE_ID = 1;
 
-    // -----------------------------
-    // Config (shared across all SingleWinner lotteries)
-    // -----------------------------
-    address public safeOwner;     // admin owner of each lottery instance
-    address public feeRecipient;  // protocol fee recipient (external wallet)
-
+    /// @notice USDC token, Entropy contract, and Entropy provider for this chain deployment.
     address public usdc;
     address public entropy;
     address public entropyProvider;
+
+    /// @notice Protocol fee recipient (external wallet, not the Safe).
+    address public feeRecipient;
 
     constructor(
         address _owner,
         address _registry,
         address _safeOwner,
-        address _feeRecipient,
         address _usdc,
         address _entropy,
-        address _entropyProvider
+        address _entropyProvider,
+        address _feeRecipient
     ) {
         if (
             _owner == address(0) ||
             _registry == address(0) ||
             _safeOwner == address(0) ||
-            _feeRecipient == address(0) ||
             _usdc == address(0) ||
             _entropy == address(0) ||
-            _entropyProvider == address(0)
+            _entropyProvider == address(0) ||
+            _feeRecipient == address(0)
         ) revert ZeroAddress();
 
         owner = _owner;
         registry = LotteryRegistry(_registry);
-
         safeOwner = _safeOwner;
-        feeRecipient = _feeRecipient;
 
         usdc = _usdc;
         entropy = _entropy;
         entropyProvider = _entropyProvider;
+        feeRecipient = _feeRecipient;
 
         emit DeployerOwnershipTransferred(address(0), _owner);
-        emit ConfigUpdated(_usdc, _entropy, _entropyProvider, _safeOwner, _feeRecipient);
+        emit ConfigUpdated(_usdc, _entropy, _entropyProvider, _feeRecipient);
     }
 
     /**
-     * @notice Allows the Safe (owner) to rotate config if needed:
-     * - USDC / Entropy / Provider changes (chain/environment upgrades)
-     * - Safe owner address changes (e.g. Safe migration)
-     * - Fee recipient changes (treasury rotation)
+     * @notice Allows Safe to rotate config if needed (e.g. entropy contract upgrade),
+     *         without changing registry or frontend.
+     *
+     * Security note:
+     * - This is an admin knob, so keep owner as Safe.
      */
-    function setConfig(
-        address _usdc,
-        address _entropy,
-        address _entropyProvider,
-        address _safeOwner,
-        address _feeRecipient
-    ) external onlyOwner {
-        if (
-            _usdc == address(0) ||
-            _entropy == address(0) ||
-            _entropyProvider == address(0) ||
-            _safeOwner == address(0) ||
-            _feeRecipient == address(0)
-        ) revert ZeroAddress();
-
+    function setConfig(address _usdc, address _entropy, address _entropyProvider, address _feeRecipient) external onlyOwner {
+        if (_usdc == address(0) || _entropy == address(0) || _entropyProvider == address(0) || _feeRecipient == address(0)) {
+            revert ZeroAddress();
+        }
         usdc = _usdc;
         entropy = _entropy;
         entropyProvider = _entropyProvider;
-
-        safeOwner = _safeOwner;
         feeRecipient = _feeRecipient;
-
-        emit ConfigUpdated(_usdc, _entropy, _entropyProvider, _safeOwner, _feeRecipient);
+        emit ConfigUpdated(_usdc, _entropy, _entropyProvider, _feeRecipient);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
@@ -145,16 +130,18 @@ contract SingleWinnerDeployer {
     // -----------------------------
 
     /**
-     * @notice Deploy and register a Single Winner lottery instance (ONE instance = ONE lottery).
+     * @notice Deploy + fund + register a Single Winner lottery instance.
      *
-     * UX:
-     * - The creator calls this once. The lottery instance is deployed + registered.
-     * - The creator must have approved USDC to the NEW lottery address inside the constructor flow.
+     * Creator UX:
+     * 1) Approve THIS Deployer for `winningPot` USDC (if allowance < pot).
+     * 2) Call createSingleWinnerLottery(...)
      *
-     * Important:
-     * - The lottery constructor pulls winningPot from the creator immediately.
-     * - After deployment, we transfer admin ownership to the Safe.
-     * - Protocol fees are allocated to feeRecipient (external treasury).
+     * Flow:
+     * - Deploy lottery instance (starts in FundingPending state)
+     * - Transfer USDC pot from user -> lottery
+     * - Call lottery.confirmFunding() (one-time) so it becomes Open
+     * - Transfer lottery ownership to Safe
+     * - Register lottery in registry
      */
     function createSingleWinnerLottery(
         string calldata name,
@@ -165,14 +152,14 @@ contract SingleWinnerDeployer {
         uint64 durationSeconds,
         uint32 minPurchaseAmount
     ) external returns (address lotteryAddr) {
-        // Deploy new instance. Deployer is temporary owner, then transfers to Safe.
+        // 1) Deploy new lottery instance (does NOT pull USDC pot in constructor)
         LotterySingleWinner lot = new LotterySingleWinner(
             address(registry),
             usdc,
             entropy,
             entropyProvider,
-            msg.sender,       // creator
-            feeRecipient,     // external protocol fee wallet
+            feeRecipient,
+            msg.sender, // creator
             name,
             ticketPrice,
             winningPot,
@@ -182,12 +169,19 @@ contract SingleWinnerDeployer {
             minPurchaseAmount
         );
 
-        // Transfer admin ownership to Safe (admin knobs: pause, entropy updates, fee recipient update, etc.)
+        // 2) Pull pot from creator directly into the new lottery instance.
+        //    The creator must approve THIS deployer as spender.
+        IERC20(usdc).safeTransferFrom(msg.sender, address(lot), winningPot);
+
+        // 3) Confirm funding (activates lottery, sets reserved accounting)
+        lot.confirmFunding();
+
+        // 4) Transfer ownership to Safe (admin knobs live on Safe)
         lot.transferOwnership(safeOwner);
 
         lotteryAddr = address(lot);
 
-        // Register in registry (requires this deployer to be authorized registrar).
+        // 5) Register in registry (requires this deployer be authorized as registrar)
         registry.registerLottery(SINGLE_WINNER_TYPE_ID, lotteryAddr, msg.sender);
     }
 }

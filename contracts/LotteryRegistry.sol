@@ -7,19 +7,18 @@ pragma solidity ^0.8.24;
  * A minimal, “forever” on-chain registry that:
  * - Stores all lottery instance addresses ever registered
  * - Stores a numeric typeId for each lottery (e.g. 1 = Single Winner)
- * - Records the creator address (for UI attribution)
+ * - Records the creator address for UI display
  * - Allows ONLY authorized registrar contracts to register new lotteries
  * - Allows ONLY the owner (your Safe multisig) to authorize registrars
  *
  * Why this pattern:
- * - Your frontend stays pointed to ONE stable registry address forever.
- * - New lottery types can be added later by deploying new "deployer/registrar" contracts
- *   and authorizing them here — without redeploying the registry.
- * - Extremely small surface area reduces long-term risk.
+ * - You do NOT want to redeploy the registry later (frontend stays pointed to one address).
+ * - You want to add new lottery types later without changing this contract.
+ * - You keep this contract extremely small to reduce attack surface long-term.
  *
- * Important:
- * - The registry does NOT contain gameplay logic.
- * - The registry does NOT finalize lotteries.
+ * NOTE:
+ * - The registry does not contain gameplay logic.
+ * - The registry does not finalize lotteries.
  * - The registry is only a “source of truth” list.
  */
 contract LotteryRegistry {
@@ -30,6 +29,7 @@ contract LotteryRegistry {
     error ZeroAddress();
     error NotRegistrar();
     error InvalidPagination();
+    error AlreadyRegistered();
 
     // -----------------------------
     // Events
@@ -88,7 +88,7 @@ contract LotteryRegistry {
     /// @notice Per-type list of lottery addresses.
     mapping(uint256 => address[]) internal lotteriesByType;
 
-    /// @notice Authorized registrar contracts that can register lotteries.
+    /// @notice Authorized registrar contracts (deployer contracts) that can register lotteries.
     mapping(address => bool) public isRegistrar;
 
     modifier onlyRegistrar() {
@@ -125,8 +125,9 @@ contract LotteryRegistry {
     function registerLottery(uint256 typeId, address lottery, address creator) external onlyRegistrar {
         if (lottery == address(0) || creator == address(0)) revert ZeroAddress();
 
-        // Prevent re-registering the same address. typeIdOf == 0 means “unregistered”.
-        require(typeIdOf[lottery] == 0, "ALREADY_REGISTERED");
+        // Prevent re-registering the same address.
+        // typeIdOf == 0 means “unregistered”.
+        if (typeIdOf[lottery] != 0) revert AlreadyRegistered();
 
         // Store global list + metadata
         allLotteries.push(lottery);
