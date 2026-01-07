@@ -1,175 +1,280 @@
 # frontend-ux-product-spec.md
 
-# Neokta — Graphical & UX Specification
-**Version:** v1.0  
-**Audience:** Product, UX/UI designers, frontend developers  
-**Goal:** Build a playful, safe, non-technical, and accessible interface that anyone can understand and enjoy
+# Neokta — Graphical & UX Specification  
+**Version:** v1.3  
+**Theme:** Digital Amusement Park with Korean Playground Vibes  
+**Audience:** Product, UX/UI designers, frontend developers
 
 ---
 
-## 0. Core Design Philosophy
+## 0. Product Vision
 
-### 0.1 Accessibility First
-This interface must be usable by:
-- Non-technical users
-- Older users
-- First-time crypto users
-- Experienced users (without alienating others)
+Neokta is a **digital amusement park**.
 
-**Rule:**  
-If a term would confuse a non-technical person, it must not appear.
+Visitors enter the park to:
+- explore playful attractions
+- try simple games of chance
+- enjoy a moment of excitement
+- leave freely at any time
+
+The experience should evoke:
+- childhood amusement parks
+- playground games
+- local festivals
+- safety and trust
+
+This is **not** a casino.  
+This is **not** a crypto dashboard.  
+This is a **friendly park with clear, fair rules**.
 
 ---
 
-### 0.2 Emotional Tone
+## 1. Core Design Principles
+
+### 1.1 Accessibility Above All
+The interface must be understandable by:
+- non-technical users
+- older users
+- first-time visitors
+- experienced users
+
+**Hard rule:**  
+If a concept cannot be explained without technical words, it must be redesigned.
+
+---
+
+### 1.2 Emotional Tone
 The experience should feel:
-- Friendly
-- Calm
-- Playful
-- Trustworthy
-- Slightly exciting
+- welcoming
+- calm
+- playful
+- nostalgic
+- reassuring
 
-It must **never** feel like:
-- A casino
-- A betting site
-- A crypto dashboard
-- A high-pressure environment
-
----
-
-### 0.3 Inspiration (Abstract)
-Inspired by:
-- Childlike simplicity
-- Colorful, playful visuals
-- Clear rules
-- Strong contrast between “simple look” and “serious fairness”
-
-Not inspired by:
-- Gambling aesthetics
-- Dark urgency
-- Flashy or noisy UIs
-
-Think:
-> “A simple game anyone can understand — designed responsibly.”
+It must never feel:
+- aggressive
+- urgent
+- stressful
+- predatory
 
 ---
 
-## 1. Language & Vocabulary (Sticky Language)
+### 1.3 UX Ethics (Non-Negotiable)
+- No fake activity
+- No fake urgency
+- No deceptive wording
+- No pressure-based mechanics
 
-### 1.1 Absolute Rule
-The UI must **never** use technical wording.
-
-No:
-- Blockchain
-- Transaction
-- Gas
-- Approve
-- Contract
-- Oracle
-- Wallet (prefer “account”)
+Fun is allowed.  
+Manipulation is not.
 
 ---
 
-### 1.2 Friendly Vocabulary Mapping
+## 2. Visual & Cultural Inspiration  
+### (Korean Playground & Festival Vibes)
+
+The park should subtly evoke **modern Korean childhood memories**.
+
+This inspiration is **atmospheric and emotional**, not literal.
+
+Designers should think of:
+- school playgrounds
+- neighborhood festivals
+- simple games after school
+- amusement park snacks and stands
+- warm, familiar textures
+
+Avoid:
+- violent themes
+- elimination imagery
+- dark or threatening symbols
+- direct references to Squid Game or any specific IP
+
+The goal is a feeling of:
+> “This reminds me of being a kid, but I can’t quite explain why.”
+
+---
+
+### 2.1 Childhood Motifs & Micro-Details (Important)
+
+To reinforce the amusement park feeling, the UI may include **small, tasteful visual details** inspired by Korean childhood experiences.
+
+These elements must remain:
+- subtle
+- decorative
+- non-intrusive
+- lightweight (performance-friendly)
+
+They should **never affect gameplay logic** or block interactions.
+
+---
+
+#### A. Snack & Treat Inspirations (Visual Only)
+
+Designers may draw inspiration from:
+- **달고나 (Dalgona candy)**  
+  - honeycomb textures  
+  - warm caramel colors  
+  - simple geometric cut-out shapes  
+- **솜사탕 (Cotton candy)**  
+  - soft gradients  
+  - fluffy, cloud-like backgrounds  
+- **아이스바 / 슬러시**  
+  - refreshing pastel tones  
+- **축제 간식 노점** (festival snack stands)  
+  - striped patterns  
+  - signage-style labels  
+
+Usage examples:
+- background textures
+- empty-state illustrations
+- section dividers
+- loading visuals
+- helper / park staff illustrations
+
+---
+
+#### B. Schoolyard & Playground Cues
+
+Optional inspiration:
+- chalk-like outlines
+- simple line drawings
+- hopscotch / playground markings (abstract)
+- rounded, toy-like shapes
+
+These should feel:
+- playful
+- innocent
+- familiar
+
+Never competitive or aggressive.
+
+---
+
+#### C. Important Constraints
+- These elements are **supporting details**, not the main focus
+- No food metaphors for money
+- No “consuming” language tied to spending
+- No overload — subtlety is key
+
+---
+
+## 3. Language & Vocabulary (Sticky Language)
+
+### 3.1 Absolute Rule
+The UI must **never** expose technical wording.
+
+Avoid entirely:
+- blockchain
+- transaction
+- gas
+- approve
+- smart contract
+- oracle
+- entropy
+
+---
+
+### 3.2 Amusement Park Vocabulary
 
 | Technical Concept | User-facing Language |
 |------------------|----------------------|
-| Connect Wallet | **Join** |
-| Disconnect | **Leave** |
-| Buy Tickets | **Join Game** |
-| Pending Tx | **Getting things ready…** |
+| Connect Wallet | **Enter the Park** |
+| Disconnect | **Leave the Park** |
+| Dashboard | **Park Entrance** |
+| Lottery / Game | **Attraction** |
+| Buy Tickets | **Play** |
+| Pending Action | **Getting things ready…** |
 | Winner | **Winner 🎉** |
 | Loser | **Thanks for playing!** |
 | Jackpot | **Prize** |
-| Dashboard | **Home** |
-| Activity Feed | **Live Moments** |
+| Activity Feed | **Park Announcements** |
 
 ---
 
-## 2. Entry Coins & Energy Coins (XTZ & USDC)
+## 4. Entry Coins & Energy Coins (USDC & XTZ)
 
-### 2.1 Goal
-Explain why users need **XTZ** and **USDC**:
-- Clearly
-- Honestly
-- Without technical explanations
+### 4.1 Purpose
+Explain **what visitors need**, **why they need it**, and **how to get it**,  
+without technical explanations or intimidation.
 
 ---
 
-### 2.2 Concept: The Helper / Cashier
+### 4.2 Park Staff / Cashier Concept
 
-A friendly helper (visual or UI component) explains:
-- What’s needed to play
-- Why it’s needed
-- How to get it
+A friendly **Park Staff** element:
+- welcomes visitors
+- explains requirements
+- checks readiness
+- guides users to get what’s missing
 
-The helper **never** pushes or pressures.
+The staff feels like:
+> “Someone working at the park, here to help.”
 
 ---
 
-### 2.3 Entry Coins (USDC)
+### 4.3 Entry Coins (USDC)
 
-**Primary name shown:**  
+**Primary name:**  
 **Entry Coins**
 
-**Explanation (simple):**
-> “Entry Coins are used to join games.”
+**Simple explanation:**  
+> “Entry Coins are used to play attractions.”
 
-**Truth (secondary line):**
+**Clear truth (secondary line):**  
 > “Entry Coins are **USDC**, a digital dollar.”
 
-**Why they exist:**
-> “They’re collected together and fairly distributed when the game ends.”
+**Why they exist:**  
+> “They’re collected together and fairly shared when an attraction ends.”
 
 ---
 
-### 2.4 Energy Coins (XTZ)
+### 4.4 Energy Coins (XTZ)
 
-**Primary name shown:**  
+**Primary name:**  
 **Energy Coins**
 
-**Explanation:**
-> “Energy Coins keep the game running smoothly.”
+**Simple explanation:**  
+> “Energy Coins keep the park running smoothly.”
 
-**Truth (secondary line):**
+**Clear truth (secondary line):**  
 > “Energy Coins are **XTZ**, used on Etherlink.”
 
-**Why they exist:**
+**Why they exist:**  
 > “Some actions need a small amount of energy to be processed.”
 
 ---
 
-### 2.5 Getting Coins (Transak)
+### 4.5 Getting Coins (Transak)
 
-When users are missing coins:
+When coins are missing:
 
-**Tone:**
-Helpful, not urgent.
+**Tone:** calm and helpful
 
-**Copy:**
+**Copy example:**  
 > “You’re almost ready!  
-> The helper can guide you to get what you need.”
+> The park staff can help you get what you need.”
 
-**CTA:**
-> **Get coins**
+**CTA:**  
+> **Get Coins**
 
 **Behavior:**
 - Opens Transak in a new tab
 - Clearly marked as external
-- Explains coins will be sent to their account on Etherlink
+- Explains coins will be sent to the visitor’s account on Etherlink
 
 ---
 
-## 3. Mandatory Disclaimer (First Visit)
+## 5. Mandatory Disclaimer (First Visit)
 
-### 3.1 Purpose
+### 5.1 Purpose
 - Transparency
-- Legal protection
 - Trust
+- Legal clarity
 
 ---
 
-### 3.2 Behavior
+### 5.2 Behavior
 - Shown on first visit
 - Blocking
 - Must be explicitly accepted
@@ -177,13 +282,13 @@ Helpful, not urgent.
 
 ---
 
-### 3.3 Copy (Recommended)
+### 5.3 Copy (Recommended)
 
-**Title:**
-> Before you play
+**Title:**  
+> Before you enter the park
 
-**Body:**
-> This platform is **experimental**.  
+**Body:**  
+> This park is **experimental**.  
 >  
 > The rules are enforced by code that has been carefully reviewed and tested, but it has **not been officially audited yet**.  
 >  
@@ -191,235 +296,71 @@ Helpful, not urgent.
 >  
 > Please only play with amounts you are comfortable experimenting with.
 
-**CTA:**
-> **I understand — continue**
+**CTA:**  
+> **I understand — enter the park**
 
 ---
 
-## 4. Page Structure Overview
+## 6. Page Structure (Park Layout)
 
-### Pages
-- **Home** (Dashboard)
-- **All Games**
-- **Game Detail**
-- **My Activity**
-- **Help / Info**
-
----
-
-## 5. Home (Dashboard)
-
-### 5.1 Purpose
-Show what’s interesting *right now*, without overwhelming.
+### Main Pages
+- **Park Entrance**
+- **All Attractions**
+- **Attraction Detail**
+- **My Visits**
+- **Help & Info**
 
 ---
 
-### 5.2 Sections
-
-#### A. Happening Now
-- 3–5 active games
-- Chosen by activity and progress
-- No urgency language
-
-#### B. Big Prizes
-- 2–3 games
-- Largest prizes
-- Calm presentation
-
-#### C. Wrapping Up
-- Games nearing results
-- Soft language
-- No aggressive countdowns
-
----
-
-### 5.3 What NOT to show
-- Sorting controls
-- Long lists
-- Finished games
-
----
-
-## 6. All Games Page
-
-### 6.1 Purpose
-Give users full control and visibility.
-
----
-
-### 6.2 Tabs
-- **Active**
-- **Finished**
-- Optional: **My Games**
-
----
-
-### 6.3 Sorting Options
-Plain language only:
-- Biggest prize
-- Ending soon
-- Newest
-- Oldest
-
-Users control sorting — no pressure.
-
----
-
-### 6.4 Default Sorting
-- Active: most relevant
-- Finished: most recent results
-
----
-
-## 7. Game Detail Page
-
-### 7.1 Clarity First
-Immediately answer:
-- What is this?
-- What can I do?
-- What happens next?
-
----
-
-### 7.2 State-Based Visuals
-
-| State | Visual Feeling |
-|------|----------------|
-| Setting up | Calm, neutral |
-| Active | Bright, inviting |
-| Processing | Soft progress indication |
-| Finished | Clear result |
-| Closed | Clear refund / closure |
-
-Animations must be:
-- Short
-- Subtle
-- Never blocking
-
----
-
-### 7.3 Joining a Game
-- Clear “Join” button
-- Shows required Entry Coins
-- Shows user balance in friendly terms
-
----
-
-## 8. Live Moments Feed
-
-### 8.1 Purpose
-Create excitement through **real activity**, not pressure.
-
----
-
-### 8.2 Name
-**Live Moments**
-
----
-
-### 8.3 Events Shown (On-chain only)
-- 🎉 A player just won $X
-- ✨ A new game just started
-- 🔔 A game finished
-
-No purchases, no losses.
-
----
-
-### 8.4 Privacy
-- Partial identifiers only:
-  - “Player A…92”
-- Never show full addresses
-
----
-
-### 8.5 Controls
-- Hide / Show toggle
-- User preference saved locally
-
----
-
-### 8.6 Performance
-- One item at a time
-- Gentle fade / slide
-- No sound
-- No flashing
-
----
-
-## 9. My Activity
+## 7. Park Entrance (Dashboard)
 
 ### Purpose
-Help users feel oriented and safe.
+Give visitors a friendly overview of **what’s happening right now**.
 
-Shows:
-- Games joined
-- Games created
-- Results
-- Pending prizes
+Sections:
+- Happening Now
+- Big Prizes
+- Wrapping Up
 
-Clear, simple history.
-
----
-
-## 10. Interaction Design
-
-### 10.1 Micro-interactions
-- Button press feedback
-- Small visual confirmation on actions
-- Gentle transitions
+Curated, calm, welcoming.
 
 ---
 
-### 10.2 Animations
-- Subtle
-- Purposeful
-- Never decorative-only
+## 8. Park Announcements (Live Event Feed)
 
-No:
-- Heavy animations
-- Continuous motion
-- Performance-heavy effects
+### Purpose
+Act like **park announcements**, sharing real moments.
+
+Events include:
+- 🎉 A visitor won $X
+- ✨ A new attraction opened
+- 🌙 An attraction closed quietly (not enough players)
+
+Each event shows:
+- friendly icon
+- short message
+- timestamp (“3 min ago”, “15:42”)
+
+Visible by default, hideable by the user.
 
 ---
 
-## 11. Sound Policy
+## 9. Interaction & Performance Rules
 
+- Subtle animations only
+- No blocking transitions
 - No sound by default
-- Entire experience must work silently
-- Optional sound support can be added later, muted by default
+- Must feel smooth on low-end devices
 
 ---
 
-## 12. Trust & Safety Cues
+## 10. Final Principle
 
-- Clear explanations
-- Clear outcomes
-- Clear refunds
-- Clear history
+> Neokta should feel like walking through a small amusement park  
+> after school —  
+> colorful, comforting, and safe —  
+> while being honest and responsible.
 
-Users should always feel:
-> “I understand what’s happening.”
-
----
-
-## 13. UX Ethics (Hard Rules)
-
-- No fake activity
-- No fake urgency
-- No deceptive wording
-- No manipulation
-- No pressure
-
-Playful ≠ predatory.
-
----
-
-## 14. Final UX Principle
-
-> This platform should feel like a simple game  
-> that respects the player’s intelligence, time, and money.
-
-If something feels unclear, rushed, or aggressive — it’s wrong.
+If something feels noisy, aggressive, or confusing — it does not belong.
 
 ---
