@@ -4,33 +4,18 @@ pragma solidity ^0.8.24;
 /**
  * @title LotteryRegistry
  * @notice A minimal, “forever” on-chain registry for lottery instances.
- * @dev This contract intentionally contains NO gameplay logic to ensure long-term stability.
  */
 contract LotteryRegistry {
-    // -----------------------------
-    // Errors
-    // -----------------------------
     error NotOwner();
     error ZeroAddress();
     error NotRegistrar();
     error AlreadyRegistered();
     error InvalidTypeId();
 
-    // -----------------------------
-    // Events
-    // -----------------------------
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
     event RegistrarSet(address indexed registrar, bool authorized);
-    event LotteryRegistered(
-        uint256 indexed index,
-        uint256 indexed typeId,
-        address indexed lottery,
-        address creator
-    );
+    event LotteryRegistered(uint256 indexed index, uint256 indexed typeId, address indexed lottery, address creator);
 
-    // -----------------------------
-    // Ownership
-    // -----------------------------
     address public owner;
 
     modifier onlyOwner() {
@@ -50,9 +35,6 @@ contract LotteryRegistry {
         owner = newOwner;
     }
 
-    // -----------------------------
-    // Registry State
-    // -----------------------------
     address[] public allLotteries;
     mapping(address => uint256) public typeIdOf;
     mapping(address => address) public creatorOf;
@@ -65,18 +47,12 @@ contract LotteryRegistry {
         _;
     }
 
-    // -----------------------------
-    // Governance
-    // -----------------------------
     function setRegistrar(address registrar, bool authorized) external onlyOwner {
         if (registrar == address(0)) revert ZeroAddress();
         isRegistrar[registrar] = authorized;
         emit RegistrarSet(registrar, authorized);
     }
 
-    // -----------------------------
-    // Registration
-    // -----------------------------
     function registerLottery(uint256 typeId, address lottery, address creator) external onlyRegistrar {
         if (lottery == address(0) || creator == address(0)) revert ZeroAddress();
         if (typeId == 0) revert InvalidTypeId();
@@ -92,9 +68,6 @@ contract LotteryRegistry {
         emit LotteryRegistered(allLotteries.length - 1, typeId, lottery, creator);
     }
 
-    // -----------------------------
-    // Views
-    // -----------------------------
     function isRegisteredLottery(address lottery) external view returns (bool) {
         return typeIdOf[lottery] != 0;
     }
@@ -106,12 +79,14 @@ contract LotteryRegistry {
     function getLotteriesByTypeCount(uint256 typeId) external view returns (uint256) {
         return lotteriesByType[typeId].length;
     }
+    
+    function getLotteryByTypeAtIndex(uint256 typeId, uint256 index) external view returns (address) {
+        return lotteriesByType[typeId][index];
+    }
 
     function getAllLotteries(uint256 start, uint256 limit) external view returns (address[] memory page) {
         uint256 n = allLotteries.length;
-        if (start >= n || limit == 0) {
-            return new address[](0);
-        }
+        if (start >= n || limit == 0) return new address[](0);
         uint256 end = start + limit;
         if (end > n) end = n;
 
@@ -121,16 +96,10 @@ contract LotteryRegistry {
         }
     }
 
-    function getLotteriesByType(uint256 typeId, uint256 start, uint256 limit)
-        external
-        view
-        returns (address[] memory page)
-    {
+    function getLotteriesByType(uint256 typeId, uint256 start, uint256 limit) external view returns (address[] memory page) {
         address[] storage arr = lotteriesByType[typeId];
         uint256 n = arr.length;
-        if (start >= n || limit == 0) {
-            return new address[](0);
-        }
+        if (start >= n || limit == 0) return new address[](0);
         uint256 end = start + limit;
         if (end > n) end = n;
 

@@ -1,0 +1,26 @@
+name = "neokta-finalizer-bot"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+node_compat = true
+
+# Run every minute
+[triggers]
+crons = ["* * * * *"]
+
+# KV namespace for locks/cursor/attempt TTL
+[[kv_namespaces]]
+binding = "BOT_STATE"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_KV_NAMESPACE_PREVIEW_ID"
+
+[vars]
+# Required
+REGISTRY_ADDRESS = "0xYOUR_REGISTRY_ADDRESS"
+RPC_URL = "https://node.mainnet.etherlink.com"
+
+# Optional tuning (safe defaults)
+HOT_SIZE = "100"
+COLD_SIZE = "50"
+MAX_TX = "5"
+TIME_BUDGET_MS = "25000"
+ATTEMPT_TTL_SEC = "600"

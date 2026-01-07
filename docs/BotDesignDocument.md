@@ -1,113 +1,159 @@
-# 🤖 Neokta Lottery Finalizer Bot - Design Document
+# 🤖 Neokta Lottery Finalizer Bot — Design Document
 
-**Version:** 1.0.0  
-**Network:** Etherlink Mainnet  
-**Architecture:** Serverless (Cloudflare Workers)  
+**Network:** Etherlink Mainnet (Chain ID 42793)  
+**Runtime:** Cloudflare Workers (Cron)  
+**Cadence:** Every 1 minute (`* * * * *`)  
+**Architecture:** Serverless + KV state  
+**Goal:** Guarantee lottery **liveness** (finalize OR cancel) while minimizing fee waste and RPC load.
 
-## 1. Overview
+---
 
-The Finalizer Bot is a permissionless, automated agent responsible for ensuring the **liveness** and **reliability** of the Neokta Lottery protocol. 
+## 1) Overview
 
-While the protocol allows any user to finalize a lottery, relying solely on user incentives creates a risk of "stuck" funds for niche or low-volume lotteries. This bot acts as the **protocol safety net**, ensuring every lottery is eventually processed without manual intervention.
+The Finalizer Bot is a permissionless automated agent that ensures every Neokta lottery progresses to a terminal state:
+
+- **Completed** (winner picked) OR
+- **Canceled** (min tickets not reached / expired)
+
+Although anyone can call `finalize()`, relying solely on organic user incentives can lead to “stuck” lotteries (especially low-volume booths). This bot acts as a protocol safety net.
 
 ### Primary Responsibilities
-1.  **Monitor:** Scan the Lottery Registry for "Open" lotteries.
-2.  **Evaluate:** Check if lotteries meet completion criteria (Deadline passed OR Max tickets sold).
-3.  **Execute:** Calculate the required entropy fee and call `finalize()` on-chain.
+1. **Discover** candidate lotteries (registry scan).
+2. **Filter** to only actionable lotteries (Open + eligible).
+3. **Finalize** by calling `finalize()` with the correct Pyth fee.
 
 ---
 
-## 2. High-Level Architecture
+## 2) Architecture
 
-The bot runs on a **Serverless Architecture** triggered by a **1-minute CRON** event. It maintains minimal state via **Cloudflare KV** to track progress and prevent concurrency issues.
+Triggered by a cron event every 60 seconds.
 
-
-
-### Core Components
-
-| Component | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Trigger** | Cron Trigger | Fires execution every 60 seconds (`* * * * *`). |
-| **Execution** | Cloudflare Worker | Node.js/Viem script that handles logic and RPC calls. |
-| **State** | Cloudflare KV | Stores the **Lock** (concurrency) and **Cursor** (scanning progress). |
-| **Blockchain** | Etherlink RPC | Interaction with Registry and Lottery Smart Contracts. |
+| Component | Tech | Purpose |
+|---|---|---|
+| Trigger | Cloudflare Cron | Executes every minute |
+| Runtime | Cloudflare Worker | Runs scanning + tx logic |
+| State | Cloudflare KV | Lock, scan cursor, attempt TTL, fee cache optional |
+| Chain | Etherlink RPC | Reads registry + lotteries, writes finalize tx |
 
 ---
 
-## 3. Key Design Decisions
+## 3) Key Design Decisions
 
 ### 3.1 Hybrid Scanning Strategy (Hot + Cold)
-**Problem:** As the registry grows to 10,000+ lotteries, scanning the entire list every minute is impossible due to RPC limits and execution time budgets.  
-**Solution:** We implement a **Hybrid Scanning** approach.
+**Problem:** Registry can reach 10k+ lotteries, cannot scan all every minute.  
+**Solution:** Always scan a small “recent hot window” + a rotating cold cursor window.
 
-| Segment | Strategy | Default Size | Goal |
-| :--- | :--- | :--- | :--- |
-| **Hot Scan** | Checks the **newest** N lotteries. | `100` | Ensure active/popular lotteries finalize immediately. |
-| **Cold Scan** | Checks a sequential batch starting from a persistent `cursor`. | `50` | Guarantee that even old/forgotten lotteries are checked eventually. |
+- **Hot scan:** newest `HOT_SIZE` lotteries (default 100)
+- **Cold scan:** `COLD_SIZE` lotteries starting from cursor (default 50)
+- Cursor advances by `COLD_SIZE` each run, wraps at end.
 
-* **Cursor Logic:** The cursor advances by `COLD_SIZE` after every successful fetch. It wraps around to 0 when it reaches the end of the registry.
+This ensures:
+- popular/new lotteries finalize quickly
+- all lotteries eventually get checked
 
-### 3.2 Stateless Efficiency via Multicall
-**Problem:** Checking 150 lotteries sequentially would require 750+ RPC calls ($150 \times 5$ reads), causing timeouts.  
+### 3.2 Multicall-First Filtering
+**Problem:** Checking each lottery sequentially explodes RPC calls and timeouts.  
 **Solution:**
-1.  **Filter Multicall:** Fetches `status()` for all candidates in one batch. Discards any lottery that is not `Open`.
-2.  **Detail Multicall:** For the remaining `Open` lotteries, fetches all details (`deadline`, `sold`, `entropy`, etc.) in chunked multicalls.
-* **Impact:** Reduces RPC overhead by ~95%.
+1) Multicall `status()` for all candidates  
+2) Keep only `Open`  
+3) For `Open`, detail-multicall: `deadline, sold, maxTickets, paused, entropy, entropyProvider`
 
 ### 3.3 Best-Effort Concurrency Locking
-**Problem:** On a 1-minute schedule, a slow run might overlap with the next trigger, causing **Nonce Collisions** or double-spending fees.  
-**Solution:** A **Read-After-Write KV Lock**.
-1.  **Check:** If `lock` exists in KV → Exit.
-2.  **Acquire:** Write `lock` = `runId` with a 180s TTL.
-3.  **Verify:** Read `lock` again. If it does not equal `runId` (race lost) → Exit.
-4.  **Release:** Delete lock at the end of execution (only if we still own it).
+A KV lock prevents overlapping runs:
+
+1) Check if `lock` exists → exit
+2) Write `lock = runId` with TTL (180s)
+3) Read back to confirm ownership
+4) Delete lock at end if still owned
+
+### 3.4 Per-Lottery Idempotency Guard (Attempt TTL)
+**Problem:** Even with a lock, restarts, TTL expiry, retries, or mempool lag can cause repeated attempts.  
+**Solution:** Write `attempt:<lottery>` with TTL (e.g., 10 minutes) before sending a tx.
+
+- Prevents fee waste due to repeated finalize attempts
+- Still preserves liveness: TTL expires and bot can retry later
+
+### 3.5 Fee Handling: Exact Fee + Refresh on Failure
+**Problem:** Overpaying the fee creates refunds and can strand native tokens as `claimableNative`.  
+**Solution:** Send **exact** `entropy.getFee(provider)` as `msg.value`.  
+If simulation fails due to fee mismatch, refresh fee and retry once.
+
+### 3.6 Manual Nonce Management (Pending Nonce)
+**Problem:** RPC nodes can lag indexing, causing nonce collisions.  
+**Solution:** Fetch nonce once from `blockTag: 'pending'` and increment locally per tx in-run.
 
 ---
 
-## 4. Security & Safety Mechanisms
+## 4) Correctness Rules (must match contracts)
 
-### 4.1 Gas & Revert Protection (Simulation)
-The bot **never** blindly sends a transaction. It uses `client.simulateContract()` before every write.
-* **Why?** Detects if a lottery was finalized by someone else *seconds ago*.
-* **Benefit:** Prevents wasted gas on failed transactions.
+A lottery is **actionable** when:
 
-### 4.2 Fee Caching
-The bot caches the Pyth Entropy fee in memory, keyed by `entropyContract:providerAddress`.
-* **Benefit:** If 50 lotteries use the same provider, we only fetch the fee once per run.
+- `status == Open`
+- `paused == false`
+- AND eligible:
+  - **Expired:** `now >= deadline`  → call `finalize()` even if `sold == 0`
+  - **Full:** `maxTickets > 0 && sold >= maxTickets` → call `finalize()`
 
-### 4.3 Zero-Sold Optimization
-If `getSold() == 0`, the bot strictly skips the lottery.
-* **Reasoning:** The smart contract reverts with `NoParticipants()` if sold is 0.
-
-### 4.4 Operational Guardrails
-To prevent the bot from crashing the node or draining the wallet:
-1.  **Time Budget:** Inner loop checks `Date.now()`. If execution > **25s**, it stops processing to avoid Cloudflare timeouts.
-2.  **Transaction Cap:** Max **5 transactions** per run.
-3.  **Env Var Caps:** `HOT_SIZE` and `COLD_SIZE` are capped in code (Max 500 / 200).
+**Important: sold == 0**
+- Do NOT blindly skip sold=0.
+- If expired, `finalize()` cancels and unlocks refunds/pot return.
+- Only skip sold=0 if not expired and not full (it’s not eligible anyway).
 
 ---
 
-## 5. Failure Modes & Recovery
+## 5) Guardrails
 
-| Failure Scenario | Bot Behavior | Recovery |
-| :--- | :--- | :--- |
-| **RPC Endpoint Down** | Throws error, logs "Critical Error", releases lock. | Auto-retries next minute. |
-| **Worker Crash (OOM)** | Process dies. Lock remains in KV. | Lock auto-expires after 180s (TTL). Next run proceeds. |
-| **Out of Gas** | `simulateContract` fails. | Operator must top up wallet. Bot resumes automatically. |
-| **Lock Race Condition** | One instance exits early. | The winner continues processing. |
+- **Time budget:** stop inner loops if runtime exceeds 25 seconds
+- **Tx cap:** maximum 5 tx per run
+- **Size caps:** HOT_SIZE <= 500, COLD_SIZE <= 200
+- **Simulation required:** always `simulateContract()` before sending
 
 ---
 
-## 6. Configuration
+## 6) Failure Modes & Recovery
 
-Configuration is managed via `wrangler.toml` and Secrets.
+| Scenario | Behavior | Recovery |
+|---|---|---|
+| RPC down | run fails, lock TTL expires | next minute retry |
+| Worker crash | lock remains until TTL | next run after TTL |
+| Fee changes | simulation fails, refresh fee, retry once | next run |
+| Someone finalized | simulation fails, skip | next run continues |
+| Mempool lag | pending nonce prevents collisions | normal operation |
 
-### Environment Variables
-```toml
-# Infrastructure
-REGISTRY_ADDRESS = "0x..."       # The immutable registry
-RPC_URL = "https://..."          # Etherlink Mainnet RPC
+---
 
-# Tuning (Optional)
-HOT_SIZE = "100"                 # Latest lotteries to check
-COLD_SIZE = "50"                 # Old lotteries to check
+## 7) Configuration
+
+**Required secrets / env vars**
+- `BOT_PRIVATE_KEY`
+- `REGISTRY_ADDRESS`
+- `RPC_URL`
+- `BOT_STATE` (KV namespace)
+
+**Optional**
+- `HOT_SIZE` default 100 (max 500)
+- `COLD_SIZE` default 50 (max 200)
+- `MAX_TX` default 5
+- `ATTEMPT_TTL_SEC` default 600
+
+---
+
+## 8) Operational Notes
+
+- Use a dedicated **hot wallet** with minimal funds.
+- Monitor:
+  - XTZ balance (for fees)
+  - tx success rate
+  - number of actionable lotteries per run
+- Add a runbook for refilling the wallet.
+
+---
+
+## 9) Summary
+
+This bot guarantees protocol liveness by:
+- scanning efficiently (hot+cold)
+- minimizing RPC load (multicall)
+- preventing fee waste (simulate + idempotency TTL)
+- staying reliable under cron overlap (KV lock + pending nonce)
+- running every minute for best user experience
