@@ -1,6 +1,6 @@
 # frontend-technical-spec.md
 
-# Neokta Ppopgi — Frontend Technical Specification (Etherlink Mainnet)
+# Ppopgi (뽑기) — Frontend Technical Specification (Etherlink Mainnet)
 **Version:** v1.1 (Aligned to pasted Solidity: `LotteryRegistry`, `SingleWinnerDeployer`, `LotterySingleWinner` v1.5)  
 **Audience:** Frontend engineers, blockchain integrators  
 **Goal:** Ship a smooth, correct, safe dApp UI that maps **1:1** to the deployed contracts on **Etherlink Mainnet**
@@ -64,7 +64,7 @@ Block Create & Buy actions behind a checkbox:
 
 ### 2.1 LotteryRegistry (Forever Registry)
 **Purpose**
-- Keeps a forever list of registered lotteries (booths).
+- Keeps a forever list of registered lotteries.
 
 **Storage / Public Reads**
 - `owner() -> address`
@@ -120,9 +120,9 @@ Block Create & Buy actions behind a checkbox:
 
 ---
 
-### 2.3 LotterySingleWinner (Per-lottery instance)
+### 2.3 LotterySingleWinner (Per-raffle instance)
 **Purpose**
-- Ticket sales + Entropy randomness + payouts for one lottery.
+- Ticket sales + Entropy randomness + payouts for one raffle.
 
 **Key Constants (UI must respect)**
 - `MAX_BATCH_BUY = 1000`
@@ -211,21 +211,21 @@ See section **10** (Exhaustive Error Map).
 
 ## 3. Pages & Required Features
 
-### 3.1 Explore (Park Map)
-**Goal:** Show all verified booths + indicate active vs closed.
+### 3.1 Explore (Raffles List)
+**Goal:** Show all verified raffles + indicate active vs closed.
 
 **Data Sources**
 1. Registry pagination:
    - `getAllLotteriesCount()`
    - `getAllLotteries(start, limit)`
-2. For each address: read lottery contract:
+2. For each address: read raffle contract:
    - `status()`, `deadline()`, `winningPot()`, `ticketPrice()`, `getSold()`, `maxTickets()`, `name()`
 
 **Verification badge**
 - Verified if `typeIdOf(lottery) > 0` OR `isRegisteredLottery(lottery) == true`.
 
 **Active definition**
-- Active booths: status `Open` or `Drawing`.
+- Active raffles: status `Open` or `Drawing`.
 
 **Pagination**
 - Implement pagination / infinite scroll based on registry count.
@@ -233,8 +233,8 @@ See section **10** (Exhaustive Error Map).
 
 ---
 
-### 3.2 Lottery Detail (Booth page)
-**Goal:** One page per lottery address.
+### 3.2 Raffle Detail
+**Goal:** One page per raffle address.
 
 **Mandatory reads**
 - `name`, `status`, `ticketPrice`, `winningPot`, `getSold()`, `deadline`
@@ -255,7 +255,7 @@ See section **10** (Exhaustive Error Map).
 
 ---
 
-### 3.3 Create Lottery (Build a Booth)
+### 3.3 Create Raffle
 **Write**
 - `SingleWinnerDeployer.createSingleWinnerLottery(...)`
 
@@ -293,19 +293,19 @@ See section **10** (Exhaustive Error Map).
 **Registry failure handling (mandatory)**
 - If the tx emitted `RegistrationFailed(lottery, creator)`:
   - Display a strong warning
-  - Show and copy the lottery address
-  - Save it to localStorage as a “Known booth” so the user can access it later even if not on map.
+  - Show and copy the raffle address
+  - Save it to localStorage as a “Known raffle” so the user can access it later even if not on list.
 
 ---
 
 ### 3.4 Prize Counter (Claims Center)
-**Goal:** Global place to claim funds/refunds across multiple lotteries.
+**Goal:** Global place to claim funds/refunds across multiple raffles.
 
 **Indexing strategy**
 - Primary: index `PrizeAllocated(user, amount, reason)` events for the connected wallet.
-- Secondary fallback: localStorage list of interacted lotteries (created, purchased, visited).
+- Secondary fallback: localStorage list of interacted raffles (created, purchased, visited).
 
-**For each lottery in claims list**
+**For each raffle in claims list**
 - Read `claimableFunds(user)` and `claimableNative(user)` and display both.
 - Enable:
   - `withdrawFunds()` if claimableFunds > 0
@@ -354,7 +354,7 @@ See section **10** (Exhaustive Error Map).
 ### 4.2 ERC20 Approvals (USDC)
 **Required approvals**
 - Create flow: approve the **deployer** to transfer `winningPot`.
-- Buy flow: approve the **lottery** to transfer `ticketPrice * count`.
+- Buy flow: approve the **raffle** to transfer `ticketPrice * count`.
 
 **UX**
 - Show current allowance
@@ -383,7 +383,7 @@ See section **10** (Exhaustive Error Map).
 
 **Balance/Allowance**
 - USDC balance >= totalCost
-- Allowance to lottery >= totalCost
+- Allowance to raffle >= totalCost
 
 **After tx**
 - Listen for `TicketsPurchased`
@@ -445,9 +445,9 @@ For a complete UX, index the following:
 
 **Factory**
 - `LotteryDeployed(...)` → discovery + metadata
-- `RegistrationFailed(lottery, creator)` → hidden booths + admin alert
+- `RegistrationFailed(lottery, creator)` → hidden raffles + admin alert
 
-**Lottery**
+**Raffle**
 - `TicketsPurchased(buyer, ...)` → ticket stub history
 - `LotteryFinalized(requestId, ...)` → drawing started
 - `WinnerPicked(winner, ...)` → winner history
@@ -465,9 +465,9 @@ If events are missing:
 
 ### 5.3 localStorage fallback
 Maintain a set keyed by `chainId + walletAddress`:
-- lotteries created
-- lotteries purchased
-- lotteries visited (optional)
+- raffles created
+- raffles purchased
+- raffles visited (optional)
 
 Use it to rebuild claims view even if indexing is unavailable.
 
