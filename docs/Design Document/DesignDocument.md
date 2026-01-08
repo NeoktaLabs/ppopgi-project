@@ -1,4 +1,4 @@
-# Design Document: Etherlink Single Winner Lottery (v1.5 - Gold Master)
+# Design Document: 뽑기 (Ppopgi) — Etherlink Single Winner Lottery
 
 ## Table of Contents
 
