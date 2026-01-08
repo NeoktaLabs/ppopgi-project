@@ -11,7 +11,7 @@
 
 ## 1) Overview
 
-The Finalizer Bot is a permissionless automated agent that ensures every Neokta lottery progresses to a terminal state:
+The Finalizer Bot is a permissionless automated agent that ensures every 뽑기 (Ppopgi) lottery progresses to a terminal state:
 
 - **Completed** (winner picked) OR
 - **Canceled** (min tickets not reached / expired)
