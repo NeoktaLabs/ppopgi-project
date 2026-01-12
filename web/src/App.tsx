@@ -13,7 +13,7 @@ import { Explore } from './pages/Explore';
 import { Profile } from './pages/Profile';
 import { Admin } from './pages/Admin';
 import { ERC20_ABI, FACTORY_ABI, REGISTRY_ABI, LOTTERY_ABI } from './contracts/abis';
-import { CONTRACT_ADDRESSES, CHAIN_ID } from './config/contracts';
+import { CONTRACT_ADDRESSES, CHAIN_ID, WALLET_CONNECT_PROJECT_ID } from './config/contracts';
 
 import '@rainbow-me/rainbowkit/styles.css';
 
@@ -28,7 +28,7 @@ const etherlink = defineChain({
 
 const config = getDefaultConfig({ 
   appName: 'Ppopgi', 
-  projectId: 'YOUR_PROJECT_ID', // Get from WalletConnect Cloud
+  projectId: WALLET_CONNECT_PROJECT_ID,
   chains: [etherlink], 
   ssr: true 
 });
