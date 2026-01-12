@@ -1,5 +1,5 @@
 # Ppopgi (뽑기) — Frontend Technical Specification (Etherlink Mainnet)
-**Version:** v1.3 (Updated to match smart contracts v1.6)  
+**Version:** v1.3
 **Audience:** Frontend engineers, blockchain integrators  
 **Goal:** Ship a smooth, correct, safe dApp UI that maps **1:1** to the deployed contracts on **Etherlink Mainnet**
 
