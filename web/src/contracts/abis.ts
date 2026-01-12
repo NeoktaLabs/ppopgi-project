@@ -10,8 +10,6 @@ export const ERC20_ABI = [
 export const FACTORY_ABI = [
   // WRITES
   { name: 'createSingleWinnerLottery', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'name', type: 'string' }, { name: 'ticketPrice', type: 'uint256' }, { name: 'winningPot', type: 'uint256' }, { name: 'minTickets', type: 'uint64' }, { name: 'maxTickets', type: 'uint64' }, { name: 'durationSeconds', type: 'uint64' }, { name: 'minPurchaseAmount', type: 'uint32' }], outputs: [{ name: 'lotteryAddr', type: 'address' }] },
-  
-  // ADMIN WRITES
   { 
     name: 'setConfig', 
     type: 'function', 
@@ -25,7 +23,6 @@ export const FACTORY_ABI = [
     ], 
     outputs: [] 
   },
-
   // READS
   { name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'usdc', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
@@ -58,7 +55,7 @@ export const LOTTERY_ABI = [
   { name: 'entropyProvider', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'entropy', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   
-  // FEES (Transparent info)
+  // FEES (Transparency)
   { name: 'feeRecipient', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'protocolFeePercent', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
 
