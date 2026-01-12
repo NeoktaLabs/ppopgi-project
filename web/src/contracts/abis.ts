@@ -1,5 +1,3 @@
-// src/contracts/abis.ts
-
 export const ERC20_ABI = [
   { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
   { name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
@@ -16,7 +14,8 @@ export const FACTORY_ABI = [
 export const REGISTRY_ABI = [
   { name: 'getAllLotteries', type: 'function', stateMutability: 'view', inputs: [{ name: 'start', type: 'uint256' }, { name: 'limit', type: 'uint256' }], outputs: [{ name: '', type: 'address[]' }] },
   { name: 'getAllLotteriesCount', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
-  { name: 'isRegisteredLottery', type: 'function', stateMutability: 'view', inputs: [{ name: 'lottery', type: 'address' }], outputs: [{ name: '', type: 'bool' }] }
+  { name: 'isRegisteredLottery', type: 'function', stateMutability: 'view', inputs: [{ name: 'lottery', type: 'address' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'typeIdOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'lottery', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }
 ] as const;
 
 export const LOTTERY_ABI = [
@@ -32,7 +31,8 @@ export const LOTTERY_ABI = [
   { name: 'creator', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'deployer', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'winner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
-  // USER SPECIFIC READS
+  { name: 'entropyProvider', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  // USER SPECIFIC
   { name: 'ticketsOwned', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'claimableFunds', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'claimableNative', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
