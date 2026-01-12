@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Ticket, Clock, Trophy, Users, CheckCircle2, Search, Target } from 'lucide-react';
 import { TransparencyModal } from './modals/TransparencyModal';
 import { OFFICIAL_DEPLOYER_ADDRESS } from '../config/contracts';
@@ -16,8 +16,8 @@ interface RaffleCardProps {
   color: any;
   creator?: string;
   rank?: number;
-  feePercent?: number; // Added
-  feeRecipient?: string; // Added
+  feePercent?: number;
+  feeRecipient?: string;
 }
 
 export function RaffleCard({ address, deployer, title, prize, ticketPrice, sold, minTickets, maxTickets, endsIn, color, creator, rank, feePercent, feeRecipient }: RaffleCardProps) {
@@ -34,7 +34,6 @@ export function RaffleCard({ address, deployer, title, prize, ticketPrice, sold,
     }
   };
 
-  // Fixed Progress Logic
   const hasHardCap = maxTickets > 0;
   const percent = hasHardCap ? Math.min((sold / maxTickets) * 100, 100) : 0;
   const minReached = sold >= minTickets;
