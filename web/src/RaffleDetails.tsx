@@ -1,210 +1,99 @@
-import React, { useState } from 'react';
-import { Ticket, Timer, Coins, ArrowRight, User, ShieldCheck, History, Trophy, Share2, Info } from 'lucide-react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import React, { useState, useEffect } from 'react';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { formatUnits } from 'viem';
+import { ArrowRight, Ticket, Clock, Trophy, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { LOTTERY_ABI, ERC20_ABI, CONTRACT_ADDRESSES } from './contracts/abis';
 
-export function RaffleDetails({ onBack }: { onBack: () => void }) {
+export function RaffleDetails({ onBack, raffleAddress }: { onBack: () => void, raffleAddress?: string }) {
+  const { address } = useAccount();
   const [ticketCount, setTicketCount] = useState(1);
-  const ticketPrice = 5; // USDC
-  const userBalance = 1250; // USDC (Mock)
+  const [txStep, setTxStep] = useState<'idle' | 'approving' | 'buying' | 'success'>('idle');
+  const isValidAddress = raffleAddress?.startsWith('0x');
 
-  // Calculate total cost
-  const totalCost = ticketCount * ticketPrice;
-  const canAfford = userBalance >= totalCost;
+  const { data: ticketPrice } = useReadContract({ address: raffleAddress as `0x${string}`, abi: LOTTERY_ABI, functionName: 'ticketPrice', query: { enabled: isValidAddress } });
+  const { data: winningPot } = useReadContract({ address: raffleAddress as `0x${string}`, abi: LOTTERY_ABI, functionName: 'winningPot', query: { enabled: isValidAddress } });
+  const { data: sold } = useReadContract({ address: raffleAddress as `0x${string}`, abi: LOTTERY_ABI, functionName: 'getSold', query: { enabled: isValidAddress } });
+  const { data: deadline } = useReadContract({ address: raffleAddress as `0x${string}`, abi: LOTTERY_ABI, functionName: 'deadline', query: { enabled: isValidAddress } });
+  const { data: raffleName } = useReadContract({ address: raffleAddress as `0x${string}`, abi: LOTTERY_ABI, functionName: 'name', query: { enabled: isValidAddress } });
+
+  const totalCost = ticketPrice ? (ticketPrice * BigInt(ticketCount)) : BigInt(0);
+
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: CONTRACT_ADDRESSES.usdc,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: address && raffleAddress ? [address, raffleAddress as `0x${string}`] : undefined,
+    query: { enabled: !!address && isValidAddress }
+  });
+
+  const needsApproval = allowance ? allowance < totalCost : true;
+  const { data: hash, writeContract, isPending: isWritePending } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+
+  useEffect(() => {
+    if (isConfirmed) {
+      if (txStep === 'approving') { refetchAllowance(); setTxStep('idle'); } 
+      else if (txStep === 'buying') setTxStep('success');
+    }
+  }, [isConfirmed]);
+
+  const handleApprove = () => {
+    setTxStep('approving');
+    writeContract({ address: CONTRACT_ADDRESSES.usdc, abi: ERC20_ABI, functionName: 'approve', args: [raffleAddress as `0x${string}`, totalCost] });
+  };
+
+  const handleBuy = () => {
+    setTxStep('buying');
+    writeContract({ address: raffleAddress as `0x${string}`, abi: LOTTERY_ABI, functionName: 'buyTickets', args: [BigInt(ticketCount)] });
+  };
+
+  const fmtUSDC = (val?: bigint) => val ? formatUnits(val, 6) : '...';
+  const fmtDate = (sec?: bigint) => sec ? new Date(Number(sec) * 1000).toLocaleString() : '...';
+
+  if (txStep === 'success') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-fade-in-up">
+        <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-6 shadow-xl shadow-green-200"><Ticket size={48} /></div>
+        <h2 className="text-3xl font-black text-gray-800 mb-2">Tickets Secured!</h2>
+        <button onClick={onBack} className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-8 rounded-xl transition-all">Back to Park</button>
+      </div>
+    );
+  }
+
+  if (!isValidAddress) return (<div className="flex flex-col items-center justify-center min-h-[50vh] text-center px-4"><AlertCircle size={48} className="text-gray-300 mb-4"/><h2 className="text-xl font-bold text-gray-600">Preview Mode</h2><button onClick={onBack} className="mt-6 text-amber-600 font-bold hover:underline">Go Back</button></div>);
 
   return (
-    <div className="min-h-screen pt-24 pb-20 px-4 animate-fade-in-up">
-      
-      {/* NAVIGATION HEADER */}
-      <div className="max-w-6xl mx-auto mb-8 flex items-center gap-4">
-        <button 
-          onClick={onBack}
-          className="bg-white/50 hover:bg-white/80 p-2.5 rounded-full backdrop-blur-sm transition-all shadow-sm"
-        >
-          <ArrowRight size={20} className="rotate-180 text-gray-700" />
-        </button>
+    <div className="min-h-screen pt-20 pb-20 px-4 animate-fade-in-up">
+      <div className="max-w-4xl mx-auto mb-6 flex items-center gap-4">
+        <button onClick={onBack} className="bg-white/50 hover:bg-white/80 p-2.5 rounded-full backdrop-blur-sm transition-all shadow-sm"><ArrowRight size={20} className="rotate-180 text-gray-700" /></button>
         <span className="text-white font-bold text-lg drop-shadow-md">Back to Park</span>
       </div>
-
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-        
-        {/* --- LEFT COLUMN: THE BIG TICKET (4 cols) --- */}
-        <div className="lg:col-span-4 sticky top-28">
-          <div className="relative transform hover:scale-[1.02] transition-transform duration-500">
-             {/* Glowing Backlight */}
-             <div className="absolute inset-0 bg-pink-500/30 blur-3xl rounded-full transform translate-y-10"></div>
-             
-             {/* THE GIANT TICKET */}
-             <div className="ticket-mask relative w-full bg-[#FFEBEE] rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10">
-                {/* Top Stub */}
-                <div className="bg-[#FFCDD2] p-8 pb-12 text-center relative border-b-2 border-dashed border-pink-400/40">
-                  <div className="flex justify-center items-center gap-2 mb-2 opacity-60">
-                     <Ticket size={16} /> 
-                     <span className="text-xs font-black uppercase tracking-[0.2em]">Verified Raffle</span>
-                  </div>
-                  <h1 className="text-3xl font-black text-gray-800 leading-tight mb-2">Weekend Jackpot</h1>
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Created by Player ...8821</p>
-                  
-                  <div className="bg-white/40 rounded-2xl p-4 border border-white/50 backdrop-blur-sm mx-auto inline-block min-w-[200px]">
-                    <span className="text-xs font-bold text-gray-600 uppercase block mb-1">Win Prize</span>
-                    <span className="text-4xl font-black text-[#E91E63] drop-shadow-sm">1,000 USDC</span>
-                  </div>
-                </div>
-
-                {/* Bottom Body */}
-                <div className="p-8 space-y-6 bg-[#FFEBEE]">
-                   {/* Stat Grid */}
-                   <div className="grid grid-cols-2 gap-4">
-                     <div className="bg-white/60 p-3 rounded-xl border border-pink-100">
-                       <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Ticket Price</p>
-                       <p className="font-bold text-lg text-amber-600 flex items-center gap-1">
-                         5 <Coins size={16} className="fill-amber-500" />
-                       </p>
-                     </div>
-                     <div className="bg-white/60 p-3 rounded-xl border border-pink-100 text-right">
-                       <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Ends In</p>
-                       <p className="font-mono font-bold text-lg text-gray-700 flex items-center justify-end gap-1">
-                         <Timer size={16} /> 02d 14h
-                       </p>
-                     </div>
-                   </div>
-
-                   {/* Progress Bar */}
-                   <div>
-                     <div className="flex justify-between text-xs font-bold text-gray-500 uppercase mb-2">
-                       <span>450 Tickets Sold</span>
-                       <span>1,000 Total</span>
-                     </div>
-                     <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                       <div className="h-full bg-[#E91E63] w-[45%] rounded-full shadow-[0_0_10px_rgba(233,30,99,0.5)]"></div>
-                     </div>
-                   </div>
-
-                   {/* Share Button */}
-                   <button className="w-full py-3 rounded-xl border-2 border-pink-200 text-pink-700 font-bold hover:bg-pink-50 transition-colors flex items-center justify-center gap-2 text-sm">
-                     <Share2 size={16} /> Share with Friends
-                   </button>
-                </div>
-             </div>
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="relative group perspective-1000">
+          <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-[2.5rem] p-1 shadow-2xl">
+            <div className="bg-white rounded-[2.3rem] p-8 h-full relative overflow-hidden flex flex-col items-center justify-center text-center min-h-[400px] border-4 border-dashed border-amber-200">
+               <div className="bg-amber-100 p-4 rounded-full text-amber-600 mb-6 shadow-inner"><Trophy size={48} /></div>
+               <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tight mb-2 leading-none">{raffleName || 'Loading...'}</h1>
+               <div className="text-5xl font-black text-amber-500 drop-shadow-sm mb-6">{fmtUSDC(winningPot)} <span className="text-lg text-gray-400 font-bold">USDC</span></div>
+               <div className="grid grid-cols-2 gap-4 w-full">
+                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100"><div className="text-xs font-bold text-gray-400 uppercase">Ticket Price</div><div className="text-lg font-black text-gray-700">{fmtUSDC(ticketPrice)} USDC</div></div>
+                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100"><div className="text-xs font-bold text-gray-400 uppercase">Sold</div><div className="text-lg font-black text-gray-700">{sold ? sold.toString() : '0'}</div></div>
+               </div>
+            </div>
           </div>
         </div>
-
-
-        {/* --- RIGHT COLUMN: THE GAME CONSOLE (8 cols) --- */}
-        <div className="lg:col-span-8 space-y-6">
-          
-          {/* 1. BUYING PANEL */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white shadow-xl relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-               <Ticket size={120} className="text-amber-500 rotate-12" />
-             </div>
-
-             <h2 className="text-2xl font-black text-gray-800 mb-6 flex items-center gap-2">
-               <span className="bg-amber-100 text-amber-700 p-2 rounded-lg"><Coins size={24} /></span>
-               Buy Tickets
-             </h2>
-
-             {/* Ticket Stepper */}
-             <div className="flex flex-col md:flex-row items-center gap-8 mb-8">
-               <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-2xl border border-gray-200">
-                 <button 
-                   onClick={() => setTicketCount(Math.max(1, ticketCount - 1))}
-                   className="w-12 h-12 flex items-center justify-center bg-white rounded-xl shadow-sm border border-gray-200 text-gray-600 hover:bg-gray-50 font-black text-xl disabled:opacity-50"
-                 >-</button>
-                 <div className="w-16 text-center">
-                   <span className="text-2xl font-black text-gray-800">{ticketCount}</span>
-                   <span className="block text-[10px] font-bold text-gray-400 uppercase">Tickets</span>
-                 </div>
-                 <button 
-                   onClick={() => setTicketCount(ticketCount + 1)}
-                   className="w-12 h-12 flex items-center justify-center bg-white rounded-xl shadow-sm border border-gray-200 text-gray-600 hover:bg-gray-50 font-black text-xl"
-                 >+</button>
-               </div>
-
-               {/* Quick Select */}
-               <div className="flex gap-2">
-                 {[5, 10, 20].map(num => (
-                   <button 
-                     key={num}
-                     onClick={() => setTicketCount(num)}
-                     className="px-4 py-2 rounded-xl border border-gray-200 font-bold text-gray-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors text-sm"
-                   >
-                     {num}x
-                   </button>
-                 ))}
-               </div>
-             </div>
-
-             {/* Summary & Action */}
-             <div className="border-t border-gray-100 pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div>
-                   <p className="text-sm font-bold text-gray-400 uppercase mb-1">Total Cost</p>
-                   <p className="text-4xl font-black text-amber-600 flex items-center gap-2">
-                     {totalCost} <span className="text-xl text-amber-600/60 font-bold">USDC</span>
-                   </p>
-                   {!canAfford && <p className="text-xs font-bold text-red-500 mt-1">Insufficient Balance</p>}
-                </div>
-
-                <button 
-                  disabled={!canAfford}
-                  className="w-full md:w-auto bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-12 py-5 rounded-2xl font-black shadow-[0_6px_0_0_#b45309] active:shadow-none active:translate-y-2 transition-all text-xl flex items-center justify-center gap-3"
-                >
-                  <Ticket size={24} />
-                  BUY NOW
-                </button>
-             </div>
-          </div>
-
-
-          {/* 2. PARTICIPANTS LIST (Social Proof) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-white/50 shadow-lg">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <User size={18} className="text-blue-500" /> Recent Entries
-                </h3>
-                <div className="space-y-3">
-                  {[1,2,3].map((_, i) => (
-                    <div key={i} className="flex items-center justify-between bg-white/50 p-3 rounded-xl border border-white/60">
-                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
-                           0x
-                         </div>
-                         <div>
-                           <p className="font-bold text-sm text-gray-700">Player ...829{i}</p>
-                           <p className="text-[10px] text-gray-400">2 minutes ago</p>
-                         </div>
-                       </div>
-                       <div className="font-bold text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-md">
-                         +5 Tickets
-                       </div>
-                    </div>
-                  ))}
-                </div>
-             </div>
-
-             {/* 3. PROVABLY FAIR INFO (Trust) */}
-             <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-white/50 shadow-lg">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <ShieldCheck size={18} className="text-green-500" /> Fairness Verified
-                </h3>
-                <div className="space-y-4">
-                   <div className="flex gap-3">
-                      <div className="mt-1"><Info size={16} className="text-gray-400" /></div>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        {/* CHANGED FROM CHAINLINK TO GENERIC: */}
-                        This raffle uses <strong>Verifiable Randomness</strong> to generate a winning number. The process is cryptographic and cannot be tampered with by the creators.
-                      </p>
-                   </div>
-                   <div className="bg-green-50 border border-green-100 p-3 rounded-xl">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-bold text-green-700 uppercase">Contract Address</span>
-                        <a href="#" className="text-[10px] font-bold text-green-600 underline hover:text-green-800">View on Explorer</a>
-                      </div>
-                      <code className="block font-mono text-xs text-green-800 bg-green-100/50 p-1 rounded">0x71C...92A1</code>
-                   </div>
-                </div>
-             </div>
-          </div>
-
+        <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white shadow-xl flex flex-col relative">
+           {(isWritePending || isConfirming) && (<div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm rounded-[2.5rem] flex flex-col items-center justify-center text-center p-6"><div className="animate-spin text-amber-500 mb-4"><Loader2 size={40} /></div><h3 className="text-lg font-bold text-gray-800">{txStep === 'approving' ? 'Approving USDC...' : 'Buying Tickets...'}</h3></div>)}
+           <div className="mb-6"><div className="flex items-center gap-2 text-amber-600 font-bold mb-2"><Clock size={18} /><span>Draws: {fmtDate(deadline)}</span></div><p className="text-gray-500 text-sm leading-relaxed">Buy tickets to enter the pool. The winner takes the entire pot (minus fees). Verifiably random & fully on-chain.</p></div>
+           <div className="mt-auto space-y-6">
+             <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center justify-between"><span className="font-bold text-gray-500 uppercase text-xs">Quantity</span><div className="flex items-center gap-4"><button onClick={() => setTicketCount(Math.max(1, ticketCount - 1))} className="w-8 h-8 rounded-full bg-white shadow text-gray-600 font-bold hover:bg-gray-100">-</button><span className="text-xl font-black text-gray-800 w-8 text-center">{ticketCount}</span><button onClick={() => setTicketCount(ticketCount + 1)} className="w-8 h-8 rounded-full bg-white shadow text-gray-600 font-bold hover:bg-gray-100">+</button></div></div>
+             <div className="flex justify-between items-end px-2"><span className="text-sm font-bold text-gray-400">Total Cost</span><div className="text-2xl font-black text-gray-800">{ticketPrice ? formatUnits(ticketPrice * BigInt(ticketCount), 6) : '...'} <span className="text-sm text-gray-400">USDC</span></div></div>
+             {needsApproval ? (
+               <button onClick={handleApprove} disabled={isWritePending || isConfirming} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-xl shadow-[0_4px_0_0_#1d4ed8] active:shadow-none active:translate-y-1 transition-all flex items-center justify-center gap-2"><ShieldCheck size={20} /> APPROVE USDC</button>
+             ) : (
+               <button onClick={handleBuy} disabled={isWritePending || isConfirming} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-4 rounded-xl shadow-[0_4px_0_0_#b45309] active:shadow-none active:translate-y-1 transition-all flex items-center justify-center gap-2"><Ticket size={20} /> BUY TICKETS</button>
+             )}
+           </div>
         </div>
       </div>
     </div>
