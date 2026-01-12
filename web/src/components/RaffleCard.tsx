@@ -32,6 +32,7 @@ export function RaffleCard({ address, deployer, title, prize, ticketPrice, sold,
     }
   };
 
+  // Fixed Progress Logic
   const hasHardCap = maxTickets > 0;
   const percent = hasHardCap ? Math.min((sold / maxTickets) * 100, 100) : 0;
   const minReached = sold >= minTickets;
