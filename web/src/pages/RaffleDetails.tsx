@@ -17,7 +17,7 @@ export function RaffleDetails({ onBack, raffleAddress }: { onBack: () => void, r
   const { data: sold } = useReadContract({ ...contractConfig, functionName: 'getSold' });
   const { data: deadline } = useReadContract({ ...contractConfig, functionName: 'deadline' });
   const { data: raffleName } = useReadContract({ ...contractConfig, functionName: 'name' });
-  const { data: deployer } = useReadContract({ ...contractConfig, functionName: 'deployer' }); // Fetch deployer for badge
+  const { data: deployer } = useReadContract({ ...contractConfig, functionName: 'deployer' });
 
   const totalCost = ticketPrice ? (ticketPrice * BigInt(ticketCount)) : BigInt(0);
 
@@ -45,7 +45,6 @@ export function RaffleDetails({ onBack, raffleAddress }: { onBack: () => void, r
     <div className="min-h-screen pt-20 pb-20 px-4 animate-fade-in-up">
       <div className="max-w-4xl mx-auto mb-6 flex items-center gap-4"><button onClick={onBack} className="bg-white/50 hover:bg-white/80 p-2.5 rounded-full backdrop-blur-sm transition-all shadow-sm"><ArrowRight size={20} className="rotate-180 text-gray-700" /></button><span className="text-white font-bold text-lg drop-shadow-md">Back to Park</span></div>
       <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Pass deployer to RaffleCard for badge */}
         <div className="relative group perspective-1000"><div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-[2.5rem] p-1 shadow-2xl"><div className="bg-white rounded-[2.3rem] p-8 h-full relative overflow-hidden flex flex-col items-center justify-center text-center min-h-[400px] border-4 border-dashed border-amber-200"><div className="bg-amber-100 p-4 rounded-full text-amber-600 mb-6 shadow-inner"><Trophy size={48} /></div><h1 className="text-3xl font-black text-gray-800 uppercase tracking-tight mb-2 leading-none">{raffleName || 'Loading...'}</h1><div className="text-5xl font-black text-amber-500 drop-shadow-sm mb-6">{winningPot ? formatUnits(winningPot, 6) : '...'} <span className="text-lg text-gray-400 font-bold">USDC</span></div></div></div></div>
         <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white shadow-xl flex flex-col relative">
            {(isWritePending || isConfirming) && (<div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm rounded-[2.5rem] flex flex-col items-center justify-center text-center p-6"><div className="animate-spin text-amber-500 mb-4"><Loader2 size={40} /></div><h3 className="text-lg font-bold text-gray-800">{txStep === 'approving' ? 'Approving USDC...' : 'Buying Tickets...'}</h3></div>)}
