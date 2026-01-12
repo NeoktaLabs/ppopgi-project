@@ -1,3 +1,5 @@
+// src/contracts/abis.ts
+
 export const ERC20_ABI = [
   { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
   { name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
@@ -32,10 +34,14 @@ export const LOTTERY_ABI = [
   { name: 'deployer', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'winner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'entropyProvider', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
-  // USER SPECIFIC
+  // FIX C: Added entropy() read so we can find the fee source dynamically
+  { name: 'entropy', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  
+  // USER SPECIFIC READS
   { name: 'ticketsOwned', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'claimableFunds', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'claimableNative', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+  
   // WRITES
   { name: 'buyTickets', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'count', type: 'uint256' }], outputs: [] },
   { name: 'finalize', type: 'function', stateMutability: 'payable', inputs: [], outputs: [] },
