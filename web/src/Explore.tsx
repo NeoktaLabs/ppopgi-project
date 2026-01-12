@@ -1,80 +1,118 @@
-import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, ArrowDownWideNarrow, ArrowUpNarrowWide, Compass } from 'lucide-react';
+import React, { useState } from 'react';
+import { useReadContract } from 'wagmi';
+import { formatUnits } from 'viem';
+import { Search, SlidersHorizontal, ArrowDownWideNarrow, ArrowUpNarrowWide, Compass, Loader2, AlertCircle } from 'lucide-react';
 import { RaffleCard } from './RaffleCard';
+import { REGISTRY_ABI, LOTTERY_ABI, CONTRACT_ADDRESSES } from './contracts/abis';
 
-const MOCK_RAFFLES = [
-  { id: 1, title: "Whale Watcher", prize: 5000, price: 20, sold: 12, minTickets: 100, total: 200, deadline: Date.now() + 86400000 * 6, creator: "0x88", color: "gold" },
-  { id: 2, title: "Weekend Jackpot", prize: 1000, price: 5, sold: 450, minTickets: 500, total: 1000, deadline: Date.now() + 86400000 * 2, creator: "0x12", color: "silver" },
-  { id: 3, title: "Moonlight Special", prize: 500, price: 2, sold: 890, minTickets: 800, total: 1000, deadline: Date.now() + 3600000 * 5, creator: "0x4a", color: "bronze" },
-  { id: 4, title: "Quickfire Draw", prize: 100, price: 1, sold: 48, minTickets: 40, total: 50, deadline: Date.now() + 1800000, creator: "0x99", color: "pink" },
-];
+// --- SUB-COMPONENT: RAFFLE CARD FETCHER ---
+// This component is responsible for fetching data for ONE raffle address
+const RaffleCardFetcher = ({ address, onNavigate }: { address: string, onNavigate: (id: string) => void }) => {
+  const contractConfig = { address: address as `0x${string}`, abi: LOTTERY_ABI };
 
-type SortOption = 'pot_desc' | 'pot_asc' | 'time_asc' | 'time_desc' | 'price_asc' | 'price_desc' | 'softcap_near' | 'softcap_far';
+  // Fetch all details for this specific raffle
+  const { data: name } = useReadContract({ ...contractConfig, functionName: 'name' });
+  const { data: prize } = useReadContract({ ...contractConfig, functionName: 'winningPot' });
+  const { data: price } = useReadContract({ ...contractConfig, functionName: 'ticketPrice' });
+  const { data: sold } = useReadContract({ ...contractConfig, functionName: 'getSold' });
+  const { data: deadline } = useReadContract({ ...contractConfig, functionName: 'deadline' });
+  const { data: minTickets } = useReadContract({ ...contractConfig, functionName: 'minTickets' });
+  const { data: creator } = useReadContract({ ...contractConfig, functionName: 'creator' });
 
-export function Explore({ onNavigate }: { onNavigate: (id: string) => void }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('pot_desc');
+  if (!name || !prize || !price || !deadline) return <div className="w-64 h-[22rem] bg-gray-100/50 rounded-[2rem] animate-pulse"></div>;
 
-  const filteredRaffles = useMemo(() => {
-    let result = [...MOCK_RAFFLES];
-    if (searchTerm) result = result.filter(r => r.title.toLowerCase().includes(searchTerm.toLowerCase()));
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'pot_desc': return b.prize - a.prize;
-        case 'pot_asc': return a.prize - b.prize;
-        case 'time_asc': return a.deadline - b.deadline;
-        case 'time_desc': return b.deadline - a.deadline;
-        case 'price_asc': return a.price - b.price;
-        case 'price_desc': return b.price - a.price;
-        case 'softcap_near': return (b.sold / b.minTickets) - (a.sold / a.minTickets);
-        case 'softcap_far': return (a.sold / a.minTickets) - (b.sold / b.minTickets);
-        default: return 0;
-      }
-    });
-    return result;
-  }, [searchTerm, sortBy]);
-
-  const getEndsInString = (deadline: number) => {
-    const diff = deadline - Date.now();
+  // Format Data
+  const fmtUSDC = (val: bigint) => formatUnits(val, 6) + ' USDC';
+  
+  const getEndsInString = (dl: bigint) => {
+    const diff = Number(dl) * 1000 - Date.now();
+    if (diff < 0) return "Ended";
     const days = Math.floor(diff / (86400000));
     const hours = Math.floor((diff % 86400000) / 3600000);
     return days > 0 ? `${days}d ${hours}h` : `${hours}h ${(Math.floor((diff % 3600000) / 60000))}m`;
   };
 
+  const total = Number(minTickets) * 2; // Approximation for progress bar visualization since there is no hard cap usually
+
+  return (
+    <div onClick={() => onNavigate(address)} className="cursor-pointer">
+      <RaffleCard 
+        title={name as string}
+        prize={fmtUSDC(prize as bigint)}
+        ticketPrice={fmtUSDC(price as bigint)}
+        sold={Number(sold)}
+        total={total}
+        endsIn={getEndsInString(deadline as bigint)}
+        color="blue" // Default color, or generate based on address hash
+        creator={`Player ...${(creator as string).slice(-4)}`}
+      />
+    </div>
+  );
+};
+
+// --- MAIN EXPLORE COMPONENT ---
+export function Explore({ onNavigate }: { onNavigate: (id: string) => void }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // FETCH LIST OF RAFFLES FROM REGISTRY
+  // We fetch the first 20 for now. Pagination would be needed for production.
+  const { data: lotteryAddresses, isLoading, isError } = useReadContract({
+    address: CONTRACT_ADDRESSES.registry,
+    abi: REGISTRY_ABI,
+    functionName: 'getAllLotteries',
+    args: [BigInt(0), BigInt(20)], // Start 0, Limit 20
+  });
+
   return (
     <div className="min-h-screen pt-24 pb-20 px-4">
       <div className="max-w-[100rem] mx-auto">
+        
+        {/* HEADER */}
         <div className="mb-6 w-fit">
           <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 border border-white/60 shadow-lg relative overflow-hidden">
             <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-2"><div className="p-2 rounded-xl bg-blue-500 text-white shadow-md rotate-[-6deg]"><Compass size={20} strokeWidth={3} /></div><h2 className="text-2xl font-black text-gray-800/90 tracking-tight uppercase drop-shadow-sm">Explore Market</h2></div>
-              <p className="text-gray-600 font-bold text-xs md:text-sm leading-relaxed max-w-2xl pl-1">Discover hottest raffles, find hidden gems, or hunt for the biggest pots.</p>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-xl bg-blue-500 text-white shadow-md rotate-[-6deg]"><Compass size={20} strokeWidth={3} /></div>
+                <h2 className="text-2xl font-black text-gray-800/90 tracking-tight uppercase drop-shadow-sm">Explore Market</h2>
+              </div>
+              <p className="text-gray-600 font-bold text-xs md:text-sm leading-relaxed max-w-2xl pl-1">
+                Real-time feed from the Etherlink Blockchain.
+              </p>
             </div>
           </div>
         </div>
 
+        {/* SEARCH & FILTERS (Visual Only in this version as sorting requires indexing) */}
         <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-3 border border-white/60 shadow-xl flex flex-col md:flex-row items-center gap-3 sticky top-0 z-40 ring-1 ring-black/5 mb-8">
           <div className="relative flex-1 w-full group">
             <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none"><Search size={22} className="text-gray-400 group-focus-within:text-blue-500 transition-colors" /></div>
-            <input type="text" placeholder="Search by raffle name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-50/50 border-2 border-transparent focus:border-blue-400 focus:bg-white rounded-2xl py-4 pl-14 pr-4 text-gray-800 font-bold text-lg focus:outline-none transition-all placeholder:text-gray-400" />
-          </div>
-          <div className="relative w-full md:w-auto min-w-[280px]">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10"><SlidersHorizontal size={20} className="text-amber-800" /></div>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)} className="w-full appearance-none bg-amber-400 hover:bg-amber-500 border-b-4 border-amber-600 text-amber-950 font-black text-sm rounded-2xl py-4 pl-12 pr-10 cursor-pointer focus:outline-none focus:ring-4 focus:ring-amber-200 transition-all shadow-sm">
-              <optgroup label="Winning Pot" className="bg-white text-gray-800"><option value="pot_desc">💰 Pot: Highest First</option><option value="pot_asc">💰 Pot: Lowest First</option></optgroup>
-              <optgroup label="Soft Cap Progress" className="bg-white text-gray-800"><option value="softcap_near">🔥 Closest to Goal</option><option value="softcap_far">❄️ Furthest from Goal</option></optgroup>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-900/60">{sortBy.includes('desc') || sortBy.includes('near') ? <ArrowDownWideNarrow size={20}/> : <ArrowUpNarrowWide size={20}/>}</div>
+            <input type="text" placeholder="Filter by address..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-50/50 border-2 border-transparent focus:border-blue-400 focus:bg-white rounded-2xl py-4 pl-14 pr-4 text-gray-800 font-bold text-lg focus:outline-none transition-all placeholder:text-gray-400" />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 justify-items-center">
-            {filteredRaffles.map((raffle) => (
-              <div key={raffle.id} onClick={() => onNavigate(raffle.id.toString())} className="cursor-pointer w-full flex justify-center">
-                <RaffleCard title={raffle.title} prize={`${raffle.prize} USDC`} ticketPrice={`${raffle.price} USDC`} sold={raffle.sold} total={raffle.total} endsIn={getEndsInString(raffle.deadline)} color={raffle.color as any} creator={`Player ${raffle.creator}`} />
+        {/* RESULTS GRID */}
+        {isLoading ? (
+           <div className="flex justify-center py-20"><Loader2 size={48} className="animate-spin text-amber-500"/></div>
+        ) : isError ? (
+           <div className="text-center py-20 text-red-500 font-bold">Error connecting to Registry. Check contract address.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 justify-items-center">
+            {lotteryAddresses && lotteryAddresses.length > 0 ? (
+              [...lotteryAddresses].reverse().map((addr) => ( // Reverse to show newest first
+                <div key={addr} className="w-full flex justify-center">
+                   <RaffleCardFetcher address={addr} onNavigate={onNavigate} />
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full flex flex-col items-center justify-center py-24 text-center bg-white/30 backdrop-blur-sm rounded-3xl border border-white/40">
+                <AlertCircle size={48} className="text-gray-300 mb-4"/>
+                <h3 className="text-2xl font-black text-gray-600">No Raffles Found</h3>
+                <p className="text-gray-500 font-medium mt-2">Be the first to create one!</p>
               </div>
-            ))}
-        </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
