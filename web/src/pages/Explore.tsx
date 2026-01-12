@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useReadContract } from 'wagmi';
 import { formatUnits } from 'viem';
 import { Search, Compass, Loader2, AlertCircle } from 'lucide-react';
@@ -9,7 +9,6 @@ import { CONTRACT_ADDRESSES, OFFICIAL_DEPLOYER_ADDRESS } from '../config/contrac
 const RaffleCardFetcher = ({ address, onNavigate }: { address: string, onNavigate: (id: string) => void }) => {
   const contractConfig = { address: address as `0x${string}`, abi: LOTTERY_ABI };
   
-  // Standard Data
   const { data: name } = useReadContract({ ...contractConfig, functionName: 'name' });
   const { data: prize } = useReadContract({ ...contractConfig, functionName: 'winningPot' });
   const { data: price } = useReadContract({ ...contractConfig, functionName: 'ticketPrice' });
@@ -19,12 +18,11 @@ const RaffleCardFetcher = ({ address, onNavigate }: { address: string, onNavigat
   const { data: maxTickets } = useReadContract({ ...contractConfig, functionName: 'maxTickets' });
   const { data: creator } = useReadContract({ ...contractConfig, functionName: 'creator' });
   const { data: deployer } = useReadContract({ ...contractConfig, functionName: 'deployer' });
-
-  // ✅ FIX: Fee Transparency Reads (Was missing in v8)
+  
+  // Fees & Badge Logic
   const { data: feeRecipient } = useReadContract({ ...contractConfig, functionName: 'feeRecipient' });
   const { data: feePercent } = useReadContract({ ...contractConfig, functionName: 'protocolFeePercent' });
-
-  // ✅ FIX: Strict Official Badge Logic (Was missing in v8)
+  
   const { data: typeId } = useReadContract({
     address: CONTRACT_ADDRESSES.registry,
     abi: REGISTRY_ABI,
@@ -59,7 +57,6 @@ const RaffleCardFetcher = ({ address, onNavigate }: { address: string, onNavigat
         endsIn={getEndsInString(deadline as bigint)}
         color="blue"
         creator={`Player ...${(creator as string).slice(-4)}`}
-        // ✅ Passing Fee & Badge Data
         feeRecipient={feeRecipient as string}
         feePercent={Number(feePercent)}
         isVerified={!!isVerified}
@@ -83,13 +80,8 @@ export function Explore({ onNavigate }: { onNavigate: (id: string) => void }) {
         <div className="mb-6 w-fit">
           <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 border border-white/60 shadow-lg relative overflow-hidden">
             <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 rounded-xl bg-blue-500 text-white shadow-md rotate-[-6deg]"><Compass size={20} strokeWidth={3} /></div>
-                <h2 className="text-2xl font-black text-gray-800/90 tracking-tight uppercase drop-shadow-sm">Explore Market</h2>
-              </div>
-              <p className="text-gray-600 font-bold text-xs md:text-sm leading-relaxed max-w-2xl pl-1">
-                Real-time feed from the Etherlink Blockchain.
-              </p>
+              <div className="flex items-center gap-3 mb-2"><div className="p-2 rounded-xl bg-blue-500 text-white shadow-md rotate-[-6deg]"><Compass size={20} strokeWidth={3} /></div><h2 className="text-2xl font-black text-gray-800/90 tracking-tight uppercase drop-shadow-sm">Explore Market</h2></div>
+              <p className="text-gray-600 font-bold text-xs md:text-sm leading-relaxed max-w-2xl pl-1">Real-time feed from the Etherlink Blockchain.</p>
             </div>
           </div>
         </div>
@@ -101,24 +93,9 @@ export function Explore({ onNavigate }: { onNavigate: (id: string) => void }) {
           </div>
         </div>
 
-        {isLoading ? (
-           <div className="flex justify-center py-20"><Loader2 size={48} className="animate-spin text-amber-500"/></div>
-        ) : isError ? (
-           <div className="text-center py-20 text-red-500 font-bold">Error connecting to Registry. Check contract address.</div>
-        ) : (
+        {isLoading ? (<div className="flex justify-center py-20"><Loader2 size={48} className="animate-spin text-amber-500"/></div>) : isError ? (<div className="text-center py-20 text-red-500 font-bold">Error connecting to Registry. Check contract address.</div>) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 justify-items-center">
-            {lotteryAddresses && lotteryAddresses.length > 0 ? (
-              [...lotteryAddresses].reverse().map((addr) => (
-                <div key={addr} className="w-full flex justify-center">
-                   <RaffleCardFetcher address={addr} onNavigate={onNavigate} />
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full flex flex-col items-center justify-center py-24 text-center bg-white/30 backdrop-blur-sm rounded-3xl border border-white/40">
-                <AlertCircle size={48} className="text-gray-300 mb-4"/>
-                <h3 className="text-2xl font-black text-gray-600">No Raffles Found</h3>
-              </div>
-            )}
+            {lotteryAddresses && lotteryAddresses.length > 0 ? ([...lotteryAddresses].reverse().map((addr) => (<div key={addr} className="w-full flex justify-center"><RaffleCardFetcher address={addr} onNavigate={onNavigate} /></div>))) : (<div className="col-span-full flex flex-col items-center justify-center py-24 text-center bg-white/30 backdrop-blur-sm rounded-3xl border border-white/40"><AlertCircle size={48} className="text-gray-300 mb-4"/><h3 className="text-2xl font-black text-gray-600">No Raffles Found</h3></div>)}
           </div>
         )}
       </div>
