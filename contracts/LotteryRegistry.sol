@@ -11,6 +11,7 @@ contract LotteryRegistry {
     error NotRegistrar();
     error AlreadyRegistered();
     error InvalidTypeId();
+    error NotContract();
 
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
     event RegistrarSet(address indexed registrar, bool authorized);
@@ -57,6 +58,7 @@ contract LotteryRegistry {
         if (lottery == address(0) || creator == address(0)) revert ZeroAddress();
         if (typeId == 0) revert InvalidTypeId();
         if (typeIdOf[lottery] != 0) revert AlreadyRegistered();
+        if (lottery.code.length == 0) revert NotContract();
 
         allLotteries.push(lottery);
         typeIdOf[lottery] = typeId;
@@ -79,14 +81,14 @@ contract LotteryRegistry {
     function getLotteriesByTypeCount(uint256 typeId) external view returns (uint256) {
         return lotteriesByType[typeId].length;
     }
-    
+
     function getLotteryByTypeAtIndex(uint256 typeId, uint256 index) external view returns (address) {
         return lotteriesByType[typeId][index];
     }
 
     function getAllLotteries(uint256 start, uint256 limit) external view returns (address[] memory page) {
         uint256 n = allLotteries.length;
-        if (start >= n || limit == 0) return new address[](0);
+        if (start >= n || limit == 0) return new address;
         uint256 end = start + limit;
         if (end > n) end = n;
 
@@ -99,7 +101,7 @@ contract LotteryRegistry {
     function getLotteriesByType(uint256 typeId, uint256 start, uint256 limit) external view returns (address[] memory page) {
         address[] storage arr = lotteriesByType[typeId];
         uint256 n = arr.length;
-        if (start >= n || limit == 0) return new address[](0);
+        if (start >= n || limit == 0) return new address;
         uint256 end = start + limit;
         if (end > n) end = n;
 
