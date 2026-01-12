@@ -8,8 +8,30 @@ export const ERC20_ABI = [
 ] as const;
 
 export const FACTORY_ABI = [
+  // WRITES
   { name: 'createSingleWinnerLottery', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'name', type: 'string' }, { name: 'ticketPrice', type: 'uint256' }, { name: 'winningPot', type: 'uint256' }, { name: 'minTickets', type: 'uint64' }, { name: 'maxTickets', type: 'uint64' }, { name: 'durationSeconds', type: 'uint64' }, { name: 'minPurchaseAmount', type: 'uint32' }], outputs: [{ name: 'lotteryAddr', type: 'address' }] },
+  
+  // ADMIN WRITES
+  { 
+    name: 'setConfig', 
+    type: 'function', 
+    stateMutability: 'nonpayable', 
+    inputs: [
+      { name: '_usdc', type: 'address' },
+      { name: '_entropy', type: 'address' },
+      { name: '_entropyProvider', type: 'address' },
+      { name: '_feeRecipient', type: 'address' },
+      { name: '_protocolFeePercent', type: 'uint256' }
+    ], 
+    outputs: [] 
+  },
+
+  // READS
   { name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'usdc', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'entropy', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'entropyProvider', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'feeRecipient', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'protocolFeePercent', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] }
 ] as const;
 
@@ -34,9 +56,12 @@ export const LOTTERY_ABI = [
   { name: 'deployer', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'winner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   { name: 'entropyProvider', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
-  // FIX C: Added entropy() read so we can find the fee source dynamically
   { name: 'entropy', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
   
+  // FEES (Transparent info)
+  { name: 'feeRecipient', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'protocolFeePercent', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+
   // USER SPECIFIC READS
   { name: 'ticketsOwned', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'claimableFunds', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
