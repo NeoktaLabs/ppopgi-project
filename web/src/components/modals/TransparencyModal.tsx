@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, ExternalLink, ShieldCheck, Database, FileCode, Factory, Coins } from 'lucide-react';
 import { OFFICIAL_DEPLOYER_ADDRESS, CONTRACT_ADDRESSES, getExplorerAddressUrl } from '../../config/contracts';
 
@@ -50,7 +49,7 @@ export function TransparencyModal({ isOpen, onClose, raffleAddress, deployerAddr
             </div>
           )}
           
-          {/* ECONOMICS SECTION (NEW) */}
+          {/* ECONOMICS SECTION */}
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">Economics</h4>
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
