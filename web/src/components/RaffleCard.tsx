@@ -16,9 +16,11 @@ interface RaffleCardProps {
   color: any;
   creator?: string;
   rank?: number;
+  feePercent?: number; // Added
+  feeRecipient?: string; // Added
 }
 
-export function RaffleCard({ address, deployer, title, prize, ticketPrice, sold, minTickets, maxTickets, endsIn, color, creator, rank }: RaffleCardProps) {
+export function RaffleCard({ address, deployer, title, prize, ticketPrice, sold, minTickets, maxTickets, endsIn, color, creator, rank, feePercent, feeRecipient }: RaffleCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const isOfficial = deployer && deployer.toLowerCase() === OFFICIAL_DEPLOYER_ADDRESS.toLowerCase();
 
@@ -78,7 +80,14 @@ export function RaffleCard({ address, deployer, title, prize, ticketPrice, sold,
           <div className="p-3 bg-gray-50 border-t border-dashed border-gray-200"><button className="w-full py-2.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg shadow-gray-200 active:scale-95 transition-transform flex items-center justify-center gap-2 group"><span>Buy for {ticketPrice}</span><Ticket size={14} className="group-hover:rotate-12 transition-transform"/></button></div>
         </div>
       </div>
-      <TransparencyModal isOpen={showDetails} onClose={() => setShowDetails(false)} raffleAddress={address || "0x..."} deployerAddress={deployer || "0x..."} />
+      <TransparencyModal 
+        isOpen={showDetails} 
+        onClose={() => setShowDetails(false)} 
+        raffleAddress={address || "0x..."} 
+        deployerAddress={deployer || "0x..."} 
+        feeRecipient={feeRecipient} 
+        feePercent={feePercent}     
+      />
     </>
   );
 }
