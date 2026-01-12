@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { Shield, Settings, AlertTriangle, Save, Lock } from 'lucide-react';
-// FIX: Correct Import Paths
 import { FACTORY_ABI } from '../contracts/abis';
 import { CONTRACT_ADDRESSES } from '../config/contracts';
 
 export function Admin({ onBack }: { onBack: () => void }) {
-  // ... (Rest of code remains identical, logic was fine, just imports were broken)
   const { address } = useAccount();
   const [activeSection, setActiveSection] = useState<'config' | 'emergency'>('config');
   const { data: factoryOwner } = useReadContract({ address: CONTRACT_ADDRESSES.factory, abi: FACTORY_ABI, functionName: 'owner' });
