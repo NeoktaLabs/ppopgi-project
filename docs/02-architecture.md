@@ -1,26 +1,44 @@
 # Architecture
 
-Ppopgi is composed of three on-chain/off-chain layers:
+## On-chain contracts
 
-## 1. LotteryRegistry (on-chain)
-A permanent registry that indexes all lotteries created via approved deployers.
-This provides a single source of truth for discovery.
+### 1) LotteryRegistry (forever)
+Purpose:
+- A permanent, minimal registry holding a list of deployed raffle contracts.
 
-## 2. SingleWinnerDeployer (on-chain)
-A factory contract that deploys individual lottery instances.
-Each instance is owned by a Safe multisig and contains immutable parameters.
+Key properties:
+- registrar-gated registration (authorized deployers only)
+- pagination helpers (bounded loops)
+- no gameplay logic
 
-## 3. LotterySingleWinner (on-chain)
-A single raffle instance:
-- ticket sales
-- randomness request
-- prize allocation
-- refunds if canceled
+### 2) SingleWinnerDeployer (factory)
+Purpose:
+- Deploys `LotterySingleWinner` instances using a shared config.
+- Registers the new raffle in the registry (best effort).
 
-## 4. Frontend (off-chain)
-A read/write interface that mirrors on-chain state exactly.
-The frontend does not introduce any extra logic.
+Key properties:
+- must be authorized as a registrar in the registry
+- deploys raffle instance, funds initial prize, confirms funding, transfers ownership to Safe
+- wraps registry registration in `try/catch` and emits `RegistrationFailed` if needed
 
-## 5. Finalizer Bot (off-chain)
-A permissionless automation bot that ensures raffles are finalized or canceled
-when eligible, improving UX without changing trust assumptions.
+### 3) LotterySingleWinner (raffle instance)
+Purpose:
+- Runs one raffle from ticket sales → draw → payouts/refunds.
+
+Key properties:
+- range-based ticket tracking for gas efficiency
+- verifiable randomness (Pyth Entropy)
+- pull-based payouts
+- cancellation paths + refunds
+- escrowed liabilities accounting (USDC + native)
+
+## Off-chain components
+
+### Frontend
+- Reads on-chain state for all views.
+- Sends transactions only after preflight checks.
+
+### Finalizer bot (Cloudflare Worker)
+- Permissionless liveness agent.
+- Scans registry, filters eligible raffles, calls `finalize()` with correct fee.
+- Uses KV locks and attempt TTLs to avoid repeated fee burns.
