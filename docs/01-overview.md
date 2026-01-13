@@ -136,3 +136,31 @@ This repository contains the following documentation files:
 
 Each document is intended to be readable on its own,  
 but together they describe the full system end-to-end.
+
+---
+
+## Terminology (documentation vs smart contracts)
+
+In the documentation and UI, the term **raffle** is commonly used.  
+In the Solidity codebase, the equivalent term is **lottery**.
+
+They refer to the same on-chain construct.
+
+- **Raffle (docs / UI term)** = **Lottery (smart contract term)**
+- **Ticket** = Entry into a raffle
+- **Finalize** = request randomness and begin settlement  
+  (winner selection occurs during the entropy callback)
+- **Withdraw / Claim** = pull-based payout from the contract
+
+---
+
+## Network reference
+
+Ppopgi runs on **Etherlink (Tezos L2)**:
+
+- **Chain ID:** `42793`
+- **Native token:** XTZ (gas and randomness/finalization fees)
+- **Ticket / prize token:** USDC (ERC20)
+
+Full RPC endpoints, deployed addresses, and entropy configuration are listed in  
+`08-technical-references.md`.
