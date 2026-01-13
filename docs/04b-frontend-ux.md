@@ -139,6 +139,37 @@ by the user before withdrawal. Refunds are never pushed automatically.
 
 ---
 
+## 6b. Sharing & invitations UX
+
+Sharing a raffle is treated as an **invitation**, not a call to action.
+
+The frontend may offer sharing options:
+- after a raffle is created
+- on individual raffle pages
+
+Sharing should feel:
+- optional
+- neutral
+- pressure-free
+
+### UX rules for sharing
+
+- Sharing must always be **explicitly user-initiated**
+- No automatic posting or prompts tied to rewards
+- No language implying winning, urgency, or endorsement
+- No manipulation of social graphs or contacts
+
+### Tone & content
+
+Shared content should:
+- describe what the raffle *is*, not what it *promises*
+- use neutral language such as “View raffle” or “Join if interested”
+- reflect only on-chain facts (e.g. prize, deadline, ticket price)
+
+If a user chooses not to share, the UI must not persist or nag.
+
+---
+
 ## 7. Errors, reverts, and failure states
 
 Errors should be treated as part of the experience, not as edge cases.
