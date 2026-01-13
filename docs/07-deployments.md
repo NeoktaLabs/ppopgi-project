@@ -1,5 +1,10 @@
-# 뽑기 (Ppopgi) Lottery Platform (Etherlink / Tezos L2) — Design & Architecture
+# Deployments
 
-A secure, scalable raffle/lottery platform designed for **everyone** — from **non-crypto users** (smooth, friendly web experience) to **crypto-native users** (direct contract usage). Built for **Etherlink (Tezos L2)** and using **USDC (6 decimals)** for entries and payouts. Randomness is provided by **Pyth Entropy**.
+This page lists all official deployments.
 
----
+## Etherlink Mainnet
+- LotteryRegistry: `TBD`
+- SingleWinnerDeployer: `TBD`
+- Safe owner: `0xe47fF5713ea90805B75bcDD93b888e076AeD9B2B`
+
+Always verify addresses independently before interacting.
