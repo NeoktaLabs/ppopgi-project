@@ -1,248 +1,152 @@
 # Ppopgi (뽑기) — Frontend Architecture & Guarantees
 
-## 1. Purpose of the Frontend
+## Purpose of this document
 
-The Ppopgi frontend is a **pure interface layer**.
+This document explains how the **Ppopgi frontend** is designed and what guarantees it provides.
 
-It exists to:
-- help users discover raffles
-- guide them through interactions
-- visualize on-chain state clearly
+It is intentionally explicit about:
+- what the frontend does
+- what it does **not** do
+- which assumptions it makes
+- which assumptions it refuses to make
 
-It does **not**:
-- custody funds
-- simulate outcomes
-- fabricate activity
-- override contract rules
+The frontend is a **pure interface layer**.  
+It does not hold funds and does not influence outcomes.
 
 ---
 
-## 2. Core Principles
+## Quick prerequisites (what users need)
 
-### 2.1 On-chain Truth Only
+To participate in a raffle on **Etherlink**, users must have **both**:
+
+- **XTZ on Etherlink**
+  - required for gas
+  - required to pay the **Entropy randomness fee** when finalizing
+
+- **USDC on Etherlink**
+  - required to buy raffle tickets
+
+If a user has only one of these, participation is impossible.
+
+The frontend should:
+- detect missing prerequisites early
+- explain clearly what is missing
+- provide links to bridging or acquisition instructions
+- avoid letting users reach confusing reverts
+
+---
+
+## Important contract constraints surfaced by the UI
+
+### Ticket purchase minimum (anti-spam rule)
+
+The raffle contract enforces the following rule:
+
+> If a buyer is **not extending the latest ticket range**,  
+> the **total purchase cost must be ≥ 1 USDC**.
+
+This prevents griefing via tiny fragmented ticket ranges.
+
+The frontend should:
+- communicate this constraint in the ticket selection UI
+- validate locally before submitting the transaction
+- show a clear error message if the rule is violated
+
+---
+
+### Finalization requires a native payment
+
+Calling `finalize()` is **payable** because it must pay the Entropy fee.
+
+The frontend should:
+- explain why finalization requires a small native payment
+- show the estimated fee when possible
+- clarify that:
+  - overpayment is refunded automatically
+  - if a refund fails, it becomes withdrawable
+
+---
+
+## Bot is convenience, not trust
+
+A background finalizer bot exists to:
+- monitor expired raffles
+- call `finalize()` automatically when possible
+
+However:
+- **anyone can finalize a raffle**
+- the bot has no special permissions
+- if the bot is offline, raffles still settle normally
+
+The frontend must always allow **manual finalization**.
+
+---
+
+## On-chain truth as the only source
 
 All displayed data comes from:
-- direct contract reads
-- verified events
-- derived values (e.g. countdown from `deadline`)
+- direct on-chain reads
+- verified contract events
+- deterministic derivations (e.g. countdown from deadline)
 
-There are:
-- no fake winners
-- no fake timers
-- no fake social proof
+The frontend:
+- does not simulate outcomes
+- does not invent progress
+- does not fabricate activity
 
----
-
-### 2.2 Explicit User Consent
-
-Every write action requires:
-- wallet connection
-- correct network
-- explicit user click
-- signed transaction
-
-No background or automatic transactions.
+If the chain state is unknown, the UI should say so.
 
 ---
 
-### 2.3 Safety Over Convenience
+## No custody, no authority
 
-If any state is unclear:
-- actions are disabled
-- the user is asked to refresh
-- no assumptions are made
+The frontend:
+- never takes custody of funds
+- cannot block withdrawals
+- cannot change raffle rules
+- cannot change winners
 
----
-
-## 3. Network Enforcement
-
-- Only Etherlink Mainnet (Chain ID 42793)
-- Wrong network → all writes disabled
-- Single CTA: “Switch to Etherlink”
+All authority resides in smart contracts.
 
 ---
 
-## 4. Discovery & Listing
+## Failure modes & graceful degradation
 
-### 4.1 Official vs Registered vs Unlisted
+If the frontend:
+- is down
+- is censored
+- becomes outdated
 
-The frontend distinguishes:
+Users can still:
+- buy tickets directly via contracts
+- finalize raffles manually
+- claim funds independently
 
-- **Official Verified**
-  - Created by the official deployer
-  - Registered in the registry
-
-- **Registered**
-  - In registry
-  - But not deployed by official deployer
-
-- **Unlisted**
-  - Not in registry
-  - Accessible only via direct address
-
-This avoids central censorship while preserving trust signals.
+The frontend is **replaceable by design**.
 
 ---
 
-## 5. Home Page Logic
+## Design priorities
 
-The home page always contains:
+The frontend prioritizes:
+1. accuracy over flashiness
+2. clarity over persuasion
+3. explanation over concealment
+4. safety over convenience
 
-1. **Biggest Winning Pots**
-   - Top 3 raffles
-   - Sorted by `winningPot`
-
-2. **Expiring Soon**
-   - Next 5 raffles by `deadline`
-
-This is computed **live** from registry reads.
-No indexer required.
+If something costs money or is irreversible,  
+the UI should say so plainly.
 
 ---
 
-## 6. Raffle Detail Page
+## Final statement
 
-### Mandatory Reads
-- status
-- ticket price
-- prize
-- sold tickets
-- limits
-- deadline
-- entropy provider
-- fee recipient
-- protocol fee %
+The Ppopgi frontend exists to:
+- reduce friction
+- explain rules
+- visualize on-chain state
 
-### UX Rules
-- Countdown uses on-chain deadline
-- Progress bar freezes on cancel
-- Odds shown only if meaningful
+It is not a gatekeeper.
 
----
-
-## 7. Fees Transparency
-
-Every raffle explicitly displays:
-- protocol fee percentage
-- fee recipient address
-- explanation in friendly language
-
-Users know **before playing**:
-- who receives fees
-- how much
-- why fees exist
-
----
-
-## 8. Create Raffle Flow
-
-Before creation, frontend verifies:
-- wallet connected
-- correct network
-- sufficient USDC balance
-- sufficient allowance
-- valid duration
-- sane price vs min purchase
-
-If anything would revert:
-- the button is disabled
-- an explanation is shown
-
----
-
-## 9. Play Flow
-
-Before buying tickets:
-- status must be Open
-- not expired
-- not creator
-- caps respected
-- balances sufficient
-
-After purchase:
-- state is re-read
-- ownership updated
-- no optimistic assumptions
-
----
-
-## 10. Draw (Finalize) Flow
-
-- Eligibility strictly checked
-- Entropy fee quoted from contract
-- Exact fee used
-- Overpayment avoided
-
-If someone else finalized first:
-- UI handles gracefully
-- user is prompted to refresh
-
----
-
-## 11. Claims & Withdrawals
-
-- Pull-based only
-- Users explicitly withdraw
-- Frontend never auto-withdraws
-
-Supports:
-- USDC withdrawals
-- Native refunds
-- Multiple raffles aggregation
-
----
-
-## 12. Admin UI (Safe Only)
-
-Admin UI is:
-- hidden unless authorized
-- guarded by on-chain reads
-
-Admin can:
-- configure future defaults
-- rescue failed registrations
-- sweep surplus only
-
-Admin **cannot**:
-- move user funds
-- change existing raffles
-- pick winners
-
----
-
-## 13. Failure Handling
-
-Handled gracefully:
-- race conditions
-- RPC hiccups
-- reverted txs
-- stale reads
-
-User always sees:
-- what happened
-- what to do next
-
----
-
-## 14. Transparency Without Intimidation
-
-Technical details are:
-- accessible via “Details” modals
-- never forced on casual users
-
-This balances:
-- trust
-- usability
-- education
-
----
-
-## 15. Final Statement
-
-The frontend is designed to be:
-- replaceable
-- auditable
-- honest
-
-If the UI disappears tomorrow,  
-**the raffles still work.** 
+If the frontend disappears tomorrow,  
+**the raffles still work.**
