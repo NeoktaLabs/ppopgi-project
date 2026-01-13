@@ -87,6 +87,35 @@ The frontend must always allow **manual finalization**.
 
 ---
 
+## Sharing & promotion (user-initiated)
+
+The frontend may provide **explicit, user-initiated sharing tools** to help
+users share raffles with others and promote discovery of the platform.
+
+Sharing features may include:
+- a copyable raffle link
+- native OS share sheets (when available)
+- optional integrations with social platforms
+
+### Guarantees
+
+- Sharing is **always optional** and **never automatic**
+- The frontend never posts on behalf of a user
+- No wallet action is triggered by sharing
+- No endorsement, outcome, or winning probability is implied
+
+### Content constraints
+
+Shared content must:
+- reflect **on-chain facts only**
+- include neutral information (e.g. raffle title, deadline, ticket price)
+- avoid promotional or manipulative language (e.g. “guaranteed win”)
+
+Sharing exists to invite others to **view or participate**,  
+not to pressure or mislead.
+
+---
+
 ## On-chain truth as the only source
 
 All displayed data comes from:
