@@ -122,9 +122,9 @@ Ppopgi is made of three independent parts:
 Each component can be deployed, verified, and run independently.
 
 ### Repositories
-- **Smart contracts:** https://github.com/your-org/ppopgi-contracts  
-- **Frontend:** https://github.com/your-org/ppopgi-frontend  
-- **Finalizer bot:** https://github.com/your-org/ppopgi-finalizer-bot  
+- **Smart contracts:** https://github.com/NeoktaLabs/ppopgi-smartcontracts  
+- **Frontend:** https://github.com/NeoktaLabs/ppopgi-frontend  
+- **Finalizer bot:** https://github.com/NeoktaLabs/ppopgi-finalizerbot  
 
 ---
 
