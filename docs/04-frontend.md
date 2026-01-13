@@ -132,6 +132,35 @@ If the chain state is unknown, the UI should say so.
 
 ---
 
+### Network & chain safety
+
+The frontend must detect the currently connected network.
+
+If the user is **not connected to Etherlink**:
+- write actions must be blocked
+- a clear explanation should be shown
+- the user should be prompted to switch networks
+
+This prevents transactions from being sent on the wrong chain
+and avoids fund confusion.
+
+---
+
+### Allowance visibility & approvals
+
+Because ticket purchases require USDC approval, the frontend should:
+
+- clearly display whether a USDC allowance already exists
+- explain when an approval transaction is required
+- distinguish clearly between:
+  - “Approve USDC”
+  - “Buy tickets”
+
+Approval visibility exists to reduce confusion and build trust.
+The frontend must not silently request approvals.
+
+---
+
 ### Transparency fields shown in the UI
 
 To improve trust and reduce support requests, the frontend should surface
@@ -170,7 +199,23 @@ For transparency, once a raffle is **Settled/Completed**, the frontend should di
 For raffles shown in “expired” / “past” lists, the raffle card should display the winner
 when the on-chain state indicates the raffle is settled.
 
+If a raffle is **Cancelled**, the UI must clearly indicate cancellation and refund
+availability instead of showing a winner.
+
 The frontend must not display a winner for raffles that are still **Open** or **Drawing**.
+
+---
+
+### Fee transparency & previews
+
+Before submitting any transaction, the frontend should show:
+- the total USDC cost
+- any required approvals
+- estimated gas fees
+- the entropy fee (when finalizing)
+
+This ensures users understand costs before signing and prevents
+hidden-fee misunderstandings.
 
 ---
 
