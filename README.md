@@ -1,22 +1,46 @@
-# Ppopgi (뽑기)
+# Ppopgi (뽑기) — A Friendly On-Chain Raffle on Etherlink (Tezos L2)
 
-Ppopgi is a transparent, on-chain raffle platform built on **Etherlink (Tezos L2)**.
-It enables anyone to create and participate in single-winner raffles using verifiable randomness,
-with clear rules, immutable logic, and user-owned funds.
+Hi 👋 I’m a solo IT guy exploring the blockchain world — and especially **Tezos**, which I’ve believed in since the early days (Tezos OG energy 🫶).
 
-The system is composed of three independent parts:
-- **Smart contracts** (lotteries, registry, fees, randomness)
-- **Frontend application** (user interface only)
-- **Finalizer bot** (liveness automation)
+This repository is the **global home** for the Ppopgi project:
+- a single-winner raffle system deployed on **Etherlink Mainnet (Tezos L2, EVM)**
+- a lightweight **registry + factory + raffle instance** smart-contract architecture
+- a friendly, non-technical **frontend** experience
+- an optional **finalizer bot** to improve raffle liveness and UX
 
-All components are open-source and verifiable on-chain.
-No simulated activity, no hidden rules, and no custodial control over user funds.
+## Important disclaimer (please read)
+I’m **not a professional smart-contract developer**.  
+I built this project with the help of **AI agents** and a lot of iteration.
 
-📄 Detailed documentation is available in the `/docs` folder.
+That means:
+- the code *may contain mistakes or edge cases*
+- the project is **not officially audited**
+- you should only interact with it using amounts you’re comfortable with
 
-### Repositories
-- Smart contracts → https://github.com/your-org/ppopgi-contracts
-- Frontend → https://github.com/your-org/ppopgi-frontend
-- Finalizer bot → https://github.com/your-org/ppopgi-finalizer-bot
+That said, I have:
+- tested the system end-to-end in realistic flows (create / play / draw / refunds / withdraw)
+- written detailed documentation so anyone can verify behavior from on-chain state
+- designed the UI around strict “on-chain truth only” rules (no fake activity, no simulated winners)
 
-**Status:** Pre-launch / Initial deployment on Etherlink Mainnet
+## Repositories
+- **Smart contracts:** (link)  
+- **Frontend:** (link)  
+- **Finalizer bot (Cloudflare Worker):** (link)
+
+## Documentation
+All detailed docs live in this repo under [`/docs`](./docs), including:
+- architecture & contract flows
+- frontend technical spec + UX spec
+- security model & threat assumptions
+- bot design + operations
+- deployment addresses and verification checklist
+
+## Philosophy
+Ppopgi aims to be:
+- **transparent** (on-chain truth, always)
+- **safe by design** (pull-based withdrawals, liabilities accounting, clear cancellation paths)
+- **friendly** (no casino language, no pressure, no dark patterns)
+
+---
+
+If you spot an issue or have suggestions, please open an issue. 🙏
