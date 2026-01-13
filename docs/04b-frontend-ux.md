@@ -109,6 +109,25 @@ The UI must not imply a winner exists before settlement.
 
 ---
 
+### Progressive transparency (avoiding overload)
+
+Transparency should be provided through **progressive disclosure**.
+
+The frontend should:
+- keep raffle cards visually simple by default
+- surface only the most relevant information inline
+- expose detailed on-chain configuration via expandable sections or modals
+
+Advanced or rarely needed fields (e.g. protocol configuration, contract addresses)
+should be:
+- hidden by default
+- clearly labeled (e.g. “On-chain details”, “Advanced”)
+- accessible without friction
+
+This ensures transparency without overwhelming users.
+
+---
+
 ## 5. Finalization UX
 
 Although a background bot exists, users should understand that:
