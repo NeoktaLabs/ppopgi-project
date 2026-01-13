@@ -1,24 +1,25 @@
-# Frontend
+# Frontend UX & Product Spec
 
-The Ppopgi frontend is a **stateless interface**.
+Tone: friendly, playful, non-technical.
+Never make users feel like they are gambling or “doing blockchain”.
 
-It:
-- reads on-chain data
-- submits user transactions
-- never stores user funds
-- never simulates activity
+## Vocabulary
+- Wallet → Pocket
+- Gas fee → Energy
+- Buy tickets → Play
+- Finalize → Draw
+- Claim funds → Collect
 
-If the frontend goes offline, users can still:
-- buy tickets
-- finalize raffles
-- withdraw funds
-using any Ethereum-compatible tool.
+## Home layout
+- Biggest winning pots (top 3)
+- Expiring soon (top 5)
+- View all
 
-### Verified badge
-Raffles created via the official deployer are marked as **Verified**.
-This means:
-- deployed using audited code
-- registered in the official registry
-- owned by the protocol Safe
-
-Unverified raffles may still be valid but were created externally.
+## Transparency without clutter
+Show addresses and technical details only in a “Details” modal:
+- raffle ID
+- rulebook link (explorer)
+- entry coin (USDC)
+- draw provider (entropy + provider)
+- factory/deployer
+- verified badge explanation
