@@ -1,66 +1,172 @@
-# Finalizer Bot (Cloudflare Worker)
+# Ppopgi (뽑기) — Finalizer Bot
 
-**Network:** Etherlink Mainnet (chainId 42793)  
-**Runtime:** Cloudflare Workers (Cron)  
-**Cadence:** Every 1 minute (`* * * * *`)  
-**State:** Cloudflare KV  
-**Goal:** Guarantee raffle liveness (finalize or cancel) while minimizing fee waste and RPC load.
+## 1. Purpose of the Finalizer Bot
 
-## What it does
-The bot is a permissionless automation agent that:
-1) scans registry for candidate raffles  
-2) filters actionable raffles (Open + eligible)  
-3) calls `finalize()` with the exact Pyth fee  
+The Finalizer Bot exists to **improve user experience**, not to secure the protocol.
 
-It has **no special permissions** and cannot change outcomes.
+It ensures that raffles:
+- do not remain idle after expiration
+- progress to completion or cancellation in a timely manner
 
-## Actionable raffle rules (must match contracts)
-A raffle is actionable when:
-- `status == Open`
-- `paused == false`
-- AND eligible:
-  - expired: `now >= deadline` → call `finalize()` (this may cancel if sold < minTickets)
-  - full: `maxTickets > 0 && sold >= maxTickets` → call `finalize()`
+Importantly:
+- anyone can finalize manually
+- the bot has no special permissions
+- the protocol does not depend on the bot
 
-Important:
-- expired + sold == 0 is still actionable: contract will cancel due to minTickets not met.
+---
 
-## Architecture
-| Component | Tech | Purpose |
-|---|---|---|
-| Trigger | Cloudflare Cron | Executes every minute |
-| Runtime | Worker | Runs scan + finalize |
-| State | KV | lock, cursor, attempt TTL |
-| Chain | Etherlink RPC | reads + tx |
+## 2. Why a Bot Is Needed
 
-## Key design decisions
-- Hybrid scanning: hot (newest N) + cold cursor window
-- Multicall-first filtering to reduce RPC calls
-- KV lock (best-effort) to avoid overlapping runs
-- Attempt TTL per raffle to avoid fee waste
-- Exact fee via `entropy.getFee(provider)`; refresh fee on failure
-- Pending nonce management to avoid collisions
+While finalization is permissionless, in practice:
+- users may forget to finalize
+- low-volume raffles may stall
+- expired raffles may remain open longer than desired
 
-## Guardrails
-- time budget (default 25s)
-- tx cap per run (`MAX_TX`, default 5–10)
-- always simulate before sending
+The bot acts as a **liveness helper**, not an authority.
 
-## Configuration
-Required:
-- `BOT_PRIVATE_KEY` (secret)
-- `REGISTRY_ADDRESS`
-- `RPC_URL`
-- KV binding: `BOT_STATE`
+---
 
-Optional tuning:
-- `HOT_SIZE` (default 100, max 500)
-- `COLD_SIZE` (default 50, max 200)
-- `MAX_TX` (default 5)
-- `TIME_BUDGET_MS` (default 25000)
-- `ATTEMPT_TTL_SEC` (default 600)
+## 3. Execution Environment
 
-## Operational notes
-- Use a dedicated hot wallet with minimal funds.
-- Monitor XTZ balance for fees + gas.
-- If registry is empty, bot exits cleanly (no tx).
+The bot runs as:
+- a Cloudflare Worker
+- triggered by a cron job every minute
+
+It is:
+- serverless
+- stateless between runs (except KV state)
+- easy to replace or shut down
+
+---
+
+## 4. What the Bot Does
+
+At each run, the bot:
+
+1. Scans the registry for raffles
+2. Filters to only `Open` raffles
+3. Checks eligibility:
+   - expired, or
+   - sold out
+4. Attempts to finalize eligible raffles
+5. Stops after a safe transaction limit
+
+---
+
+## 5. What the Bot Does NOT Do
+
+The bot:
+- cannot pick winners
+- cannot move user funds
+- cannot change raffle rules
+- cannot bypass contract checks
+
+If the bot behaves incorrectly:
+- transactions revert
+- funds remain safe
+
+---
+
+## 6. Safety & Guardrails
+
+Several protections are built in:
+
+- **Simulation before sending**
+  - Every transaction is simulated first
+- **Exact fee payment**
+  - Avoids dust or trapped native tokens
+- **Idempotency TTL**
+  - Prevents repeated attempts on the same raffle
+- **Transaction cap**
+  - Limits risk per run
+- **Time budget**
+  - Prevents runaway execution
+
+---
+
+## 7. Key-Value State Usage
+
+Cloudflare KV is used only for:
+- run locking (avoid overlapping executions)
+- scan cursor position
+- recent-attempt tracking
+
+No sensitive data is stored permanently.
+
+---
+
+## 8. Failure Scenarios
+
+| Scenario | Outcome |
+|--------|---------|
+| Bot is down | Users can finalize manually |
+| RPC failure | Bot retries later |
+| Fee changes | Bot refreshes fee |
+| Someone finalized first | Bot skips safely |
+| Worker crashes | Next run resumes |
+
+The system remains functional in all cases.
+
+---
+
+## 9. Trust Model
+
+The bot wallet:
+- holds minimal funds
+- only pays entropy fees
+- cannot access raffle funds
+
+Even if compromised:
+- worst case is wasted fees
+- no user funds are at risk
+
+---
+
+## 10. Decentralization Considerations
+
+The bot is:
+- permissionless
+- optional
+- replaceable
+
+Anyone can:
+- run their own version
+- fork the logic
+- finalize manually
+
+This avoids central dependency.
+
+---
+
+## 11. Operational Transparency
+
+The bot:
+- logs each run
+- logs each attempted finalization
+- exposes no private APIs
+
+All actions are visible on-chain.
+
+---
+
+## 12. Relationship With Future Indexers
+
+An indexer (e.g. The Graph) is optional and independent.
+
+The bot:
+- does not rely on an indexer
+- does not increase indexing costs
+- only reads on-chain state
+
+---
+
+## 13. Final Notes
+
+The Finalizer Bot is intentionally boring.
+
+It exists to:
+- reduce friction
+- keep the system moving
+- disappear quietly when not needed
+
+If it fails, the protocol still works.
