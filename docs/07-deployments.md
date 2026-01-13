@@ -5,296 +5,206 @@
 This document explains **how Ppopgi is deployed and operated in production**.
 
 It covers:
-- smart contract deployment
+- smart contract deployment order
+- ownership and governance
 - frontend deployment
-- automation bot deployment
-- operational responsibilities
-- security and governance considerations
+- automation (finalizer bot)
+- operational responsibilities and limitations
+
+> **Source of truth for live addresses, constants, and external dependencies:**  
+> See `08-technical-references.md`.
 
 This document is intentionally **transparent and conservative**.  
 It does not claim perfection and does not hide operational risks.
 
 ---
 
-## 2. System Overview
+## 2. Environments
 
-Ppopgi is composed of **three independent layers**:
+Ppopgi may be deployed in multiple environments:
 
-1. **Smart Contracts** — Etherlink (EVM-compatible Tezos L2)
-2. **Frontend Web Application** — Cloudflare Pages
-3. **Finalizer Bot** — Cloudflare Workers + Cron
+- local development
+- testnets
+- Etherlink Mainnet
 
-There is:
-- no centralized backend server
-- no custodial wallet
-- no off-chain state required for correctness
+Each environment uses:
+- its own contract addresses
+- its own randomness provider configuration
+- its own frontend deployment
 
-Each layer can fail independently without putting user funds at risk.
-
----
-
-## 3. Network & Environment
-
-### 3.1 Target Network
-
-- **Network:** Etherlink Mainnet
-- **Chain ID:** `42793`
-- **Native Token:** XTZ
-- **Execution Model:** EVM-compatible
-
-All contracts are deployed **only on Etherlink Mainnet**.
+Addresses **must never** be hardcoded across environments.
 
 ---
 
-## 4. Smart Contract Deployment
+## 3. Smart contract deployment
 
-### 4.1 Deployment Order
+### 3.1 Deployment order
 
-Smart contracts must be deployed **in the following order**:
+Smart contracts must be deployed in the following order:
 
 1. **LotteryRegistry**
 2. **SingleWinnerDeployer**
-3. *(Per raffle)* **LotterySingleWinner** (deployed via the deployer)
+3. *(per raffle)* **LotterySingleWinner** (via the deployer)
 
-### 4.2 Ownership Model
+Deploying in a different order is unsupported.
+
+---
+
+### 3.2 Ownership model
 
 - All core contracts are owned by an **Etherlink Safe (multisig)**.
-- Initially, the Safe contains **a single signer** (the project creator).
-- Additional signers can be added in the future if the project grows.
+- Initially, the Safe may contain a single signer for operational simplicity.
+- Additional signers can be added over time.
 
-Ownership allows:
-- authorizing deployers
-- updating deployer configuration
-- performing rescue operations
-
-Ownership **does not allow draining user funds** from active raffles.
+Ownership is transferred immediately after deployment.
 
 ---
 
-### 4.3 Registry Deployment
-
-**LotteryRegistry** is the permanent on-chain registry.
-
-- Deployed once
-- Intended to remain unchanged
-- Stores:
-  - all registered lotteries
-  - their type identifiers
-  - creator addresses
-  - registration timestamps
+### 3.3 Registry configuration
 
 After deployment:
-- The Safe authorizes the deployer via `setRegistrar(deployer, true)`.
+
+- the deployer is authorized as a registrar in `LotteryRegistry`
+- unauthorized registrars are rejected
+- the registry becomes the canonical source of “official” raffles
+
+Failure to register:
+- does not brick a raffle
+- only affects discoverability
 
 ---
 
-### 4.4 Deployer Deployment
+### 3.4 Deployer configuration
 
-**SingleWinnerDeployer** is deployed next.
+The `SingleWinnerDeployer` holds defaults for **future raffles**, including:
 
-It is configured with:
-- USDC token address
-- Pyth Entropy contract
-- Entropy provider
-- Protocol fee recipient
-- Protocol fee percentage
+- `protocolFeePercent`
+- `feeRecipient`
+- `entropy` contract
+- `entropyProvider`
+- `usdc` token address
+- `registry` address
 
-The deployer:
-- deploys lottery instances
-- transfers ownership of each lottery to the Safe
-- attempts to register the lottery in the registry
-
-If registry registration fails, deployment still succeeds and can be rescued later.
+Changing these values:
+- affects only raffles deployed **after** the change
+- does **not** affect existing raffles
 
 ---
 
-### 4.5 Lottery Deployment (Runtime)
+## 4. Frontend deployment
 
-Each raffle is deployed **on demand**:
+The frontend is a stateless client application.
 
-- Created via the frontend or directly via the deployer
-- Funded at creation
-- Activated only after strict funding confirmation
+### Responsibilities
+- discover raffles via the registry
+- read on-chain state
+- submit user transactions
+- explain requirements and costs clearly
 
-Each raffle:
-- is a standalone contract
-- holds its own funds
-- has immutable configuration (fee recipient, creator, rules)
+### Non-responsibilities
+- custody of funds
+- enforcement of rules
+- outcome determination
 
----
-
-## 5. Frontend Deployment
-
-### 5.1 Hosting Platform
-
-- **Provider:** Cloudflare Pages
-- **Type:** Static frontend
-- **Framework:** Vite + React
-
-There is:
-- no backend API
-- no database
-- no server-side logic
-
-All reads/writes go directly to the blockchain.
+The frontend must be treated as:
+- replaceable
+- non-trusted
+- informational only
 
 ---
 
-### 5.2 Build & Deploy Flow
+## 5. Finalizer bot
 
-1. Frontend repository is linked to Cloudflare Pages
-2. Cloudflare automatically:
-   - installs dependencies
-   - builds the project
-   - serves static assets globally
-3. Deployments are triggered on:
-   - main branch pushes
-   - manual redeploys
+### Purpose
 
-Environment variables are injected at build time.
+The finalizer bot exists to:
+- monitor raffles
+- detect when they are eligible for finalization
+- call `finalize()` automatically
 
----
+### Trust model
 
-### 5.3 Environment Variables
+- the bot has no special permissions
+- anyone can run a compatible bot
+- manual finalization is always possible
 
-Typical frontend variables include:
-
-- `VITE_CHAIN_ID`
-- `VITE_REGISTRY_ADDRESS`
-- `VITE_DEPLOYER_ADDRESS`
-- `VITE_WC_PROJECT_ID`
-
-No secrets are stored in the frontend.
+If the bot fails or is offline:
+- raffles do not get stuck
+- users can finalize directly
 
 ---
 
-## 6. Finalizer Bot Deployment
+## 6. Randomness provider operations
 
-### 6.1 Purpose
+Ppopgi relies on an external randomness provider (Entropy).
 
-The Finalizer Bot ensures **protocol liveness** by:
+Operational responsibilities include:
+- ensuring the provider contract address is correct
+- ensuring the provider is funded and reachable
+- monitoring callback success
 
-- scanning open raffles
-- finalizing expired or full raffles
-- preventing stuck games
+Failure modes:
+- delayed randomness
+- delayed settlement
 
-The bot is **not trusted**:
-- anyone can finalize a raffle manually
-- the bot only automates public actions
-
----
-
-### 6.2 Hosting Platform
-
-- **Provider:** Cloudflare Workers
-- **Execution:** Serverless
-- **Trigger:** Cron (`* * * * *` — every minute)
+These do **not** allow:
+- theft of funds
+- manipulation of outcomes
 
 ---
 
-### 6.3 State Management
+## 7. Operational risks & limitations
 
-The bot uses Cloudflare KV for:
+Known operational risks include:
+- frontend downtime
+- RPC instability
+- randomness provider delays
+- congestion-related fee spikes
 
-- run locking
-- scan cursor
-- per-lottery attempt TTL
-
-This prevents:
-- duplicate executions
-- fee waste
-- nonce collisions
-
----
-
-### 6.4 Secrets & Permissions
-
-Secrets stored securely in Cloudflare:
-
-- `BOT_PRIVATE_KEY`
-
-The bot wallet:
-- holds minimal XTZ
-- has no special on-chain permissions
-- can only call public functions
-
-If compromised, impact is limited to wasted gas.
+Mitigations:
+- permissionless contract access
+- manual fallback paths
+- transparent UX
+- conservative defaults
 
 ---
 
-## 7. Operational Responsibilities
+## 8. Governance & upgrades
 
-### 7.1 What the Operator Can Do
+Ppopgi does **not** use upgradeable proxy contracts.
 
-The operator (Safe owner) can:
+Implications:
+- deployed raffles are immutable
+- bugs cannot be patched in-place
+- fixes require redeployment
 
-- deploy new raffle types
-- update deployer defaults
-- rescue failed registrations
-- pause lotteries in emergencies
-- sweep accidental surplus funds
-
-### 7.2 What the Operator Cannot Do
-
-The operator **cannot**:
-
-- steal user tickets
-- change raffle outcomes
-- withdraw user funds
-- alter randomness
-- modify fees of active raffles
+Governance actions are therefore limited to:
+- deploying new contracts
+- updating off-chain components
+- communicating changes clearly
 
 ---
 
-## 8. Failure Scenarios
+## 9. Incident response philosophy
 
-| Scenario | Impact | Recovery |
-|--------|-------|---------|
-| Frontend down | UX unavailable | Funds safe on-chain |
-| Bot down | Raffles can still be finalized manually | Restart bot |
-| RPC outage | Temporary read/write failure | Retry later |
-| Oracle delay | Drawing phase delayed | Emergency cancel available |
-| Operator key lost | Admin actions blocked | Raffles continue safely |
+If something goes wrong:
+- the team communicates openly
+- on-chain facts are prioritized
+- users retain full control over funds
 
----
-
-## 9. Upgrade Strategy
-
-- Registry is designed to be **immutable**
-- New raffle types require new deployers
-- Frontend is upgradeable without affecting contracts
-- Bot logic can be updated independently
-
-No contract upgrade can:
-- rewrite history
-- change active raffle rules
+There is no emergency admin drain,
+because there is nothing to drain.
 
 ---
 
-## 10. Transparency Commitments
+## Final note
 
-Ppopgi commits to:
+Ppopgi is operated with the assumption that:
+- infrastructure fails
+- operators make mistakes
+- users act adversarially
 
-- publishing contract addresses
-- documenting deployment steps
-- explaining risks clearly
-- avoiding hidden admin privileges
-- keeping the system as decentralized as reasonably possible
+The system is designed so that  
+**these failures do not become catastrophic.**
 
----
-
-## 11. Final Notes
-
-This project is:
-
-- experimental
-- self-funded
-- built in spare time
-- heavily tested but **not formally audited**
-
-It is shared in the spirit of:
-- learning
-- transparency
-- respect for Tezos values
-
-If something looks wrong — **assume good faith and ask questions**.
+That is the core operational guarantee.
