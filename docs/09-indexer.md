@@ -1,4 +1,4 @@
-# Ppopgi Indexer (The Graph) — Documentation
+# Ppopgi (뽑기) Indexer (The Graph) — Documentation
 
 This document describes the **Ppopgi indexer** built with **The Graph**, targeting **Etherlink (EVM)**.
 
