@@ -21,6 +21,7 @@ User funds are protected by:
 - strict state transitions
 - permissionless actions
 - pull-based withdrawals
+- invariant-enforced accounting
 
 Not by operator goodwill.
 
@@ -50,6 +51,7 @@ The admin (an Etherlink Safe) can:
 - configure defaults for **future** raffles
 - pause or update off-chain services (frontend, bot)
 - recover tokens accidentally sent to the **deployer contract**
+- recover surplus funds not owed to users (see Surplus Recovery)
 - upgrade operational processes off-chain
 
 The admin **cannot**:
@@ -84,7 +86,7 @@ A “valid raffle” means one that:
 Emergency cancellation is possible only in the case of stalled randomness  
 and exists solely to recover user funds.
 
-All of these properties are enforced by code.
+All of these properties are enforced by code and verified by tests.
 
 ---
 
@@ -110,6 +112,8 @@ Ppopgi uses an external on-chain randomness provider (**Entropy**) to select win
 
 These scenarios delay settlement but do **not** allow fund theft or outcome manipulation.
 
+Invalid or late callbacks are safely ignored and cannot corrupt state.
+
 ---
 
 ## Finalization & entropy fees
@@ -124,9 +128,11 @@ These scenarios delay settlement but do **not** allow fund theft or outcome mani
 - The caller must send enough native token to cover this fee.
 
 ### Fee handling guarantees
-- Overpayment is refunded automatically.
-- If an automatic refund fails, the amount becomes withdrawable.
+- Overpayment is refunded automatically **when possible**.
+- If an automatic refund fails, the amount becomes withdrawable by the caller.
 - If the raffle cancels due to insufficient ticket sales, any entropy fee sent is returned or becomes withdrawable.
+
+No entropy fee is ever retained silently by the protocol.
 
 ---
 
@@ -196,13 +202,39 @@ If both disappear, the system still functions.
 
 ## Surplus recovery (safety accounting)
 
-To recover accidental transfers:
+To recover accidental transfers and dust:
 
-- USDC above on-chain reserved liabilities may be swept
-- native token above tracked refundable balances may be swept
+- USDC held above on-chain reserved liabilities may be swept
+- native token held above tracked refundable balances may be swept
 
-This recovery mechanism cannot affect legitimate user funds  
-and is constrained by explicit on-chain accounting.
+These operations are constrained by explicit accounting variables and enforced
+by invariants ensuring that:
+
+- user claimable balances are never reduced
+- solvency is preserved at all times
+
+Surplus recovery exists to prevent permanent fund lock-up,
+not to extract value from users.
+
+---
+
+## Testing & invariant enforcement
+
+Security properties are reinforced through extensive testing:
+
+- comprehensive unit tests for all user-visible flows
+- fuzz testing across adversarial call sequences
+- invariant testing using Foundry to enforce global safety properties
+
+Key enforced invariants include:
+- contract solvency (`balance ≥ reserved liabilities`)
+- correctness of state transitions
+- immutability of raffle parameters
+- single-use randomness requests
+- protection of user claimable balances
+
+While testing does not replace a formal audit, it significantly reduces the risk
+of logic, accounting, and state-machine errors.
 
 ---
 
