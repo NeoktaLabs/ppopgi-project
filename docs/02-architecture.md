@@ -108,6 +108,11 @@ Ppopgi is composed of **four main layers**:
 - Prevents spoofed “official” lotteries
 - Ensures consistent parameters for all new raffles
 
+**Administrative Scope**
+- The deployer cannot alter raffle rules after deployment
+- It cannot move user funds
+- It cannot interfere with an active raffle
+
 ---
 
 ### 3.4 LotterySingleWinner (One Instance = One Raffle)
@@ -131,12 +136,17 @@ Each raffle:
 **Key Properties**
 - Pull-based payouts (users withdraw)
 - No admin function can move user funds
-- Strong accounting invariants
+- Strong accounting invariants enforced in code and tests
 
 **Clarification (finalization vs resolution)**  
 Calling `finalize()` **does not immediately select a winner**.  
 Finalization requests randomness and moves the raffle into a drawing state.  
 Winner selection and fund allocation occur later during the entropy callback.
+
+**Native fees**
+- Finalization requires paying a native network fee to request randomness
+- Anyone may pay this fee
+- Native funds held by the raffle that are not explicitly owed to users are considered protocol surplus
 
 ---
 
@@ -148,14 +158,18 @@ Winner selection and fund allocation occur later during the entropy callback.
 **Usage**
 - Lottery requests randomness only when finalized
 - Callback validates:
-  - sender
+  - caller (entropy contract)
   - request ID
   - provider
-- Winner derived deterministically
+- Winner derived deterministically from returned randomness
 
 **Security**
 - Admin cannot influence outcome
 - Randomness request is locked at finalize time
+
+**Callback behavior**
+- Invalid, late, or mismatched callbacks are safely ignored
+- Rejected callbacks do not alter raffle state
 
 **Failure model**
 - If the randomness callback does not arrive, the raffle remains in a drawing state
@@ -173,6 +187,10 @@ Winner selection and fund allocation occur later during the entropy callback.
 - Bot has no special permissions
 - Bot cannot steal funds
 
+**Operational note**
+- Finalization incurs a native network fee
+- The bot is an economic convenience, not a trusted actor
+
 **If the bot is down**
 - The protocol still works
 - Users can finalize manually
@@ -188,8 +206,8 @@ A typical raffle lifecycle:
 3. Users buy tickets
 4. Deadline or max tickets reached
 5. Anyone (user or bot) calls finalize
-6. Randomness resolves
-7. Winner is allocated
+6. Randomness resolves via callback
+7. Winner and allocations are recorded
 8. Users withdraw funds themselves
 
 **Notes**
@@ -216,7 +234,7 @@ At **no point** does the admin:
 | Bot | ❌ | ❌ | ❌ |
 
 **Key takeaway:**  
-Once a raffle is open, **nobody has unilateral power**.
+Once a raffle is open, **nobody has unilateral power** over outcomes or funds.
 
 ---
 
