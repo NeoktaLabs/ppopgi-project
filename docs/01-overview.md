@@ -68,7 +68,7 @@ This reduces both complexity and attack surface.
 ---
 
 ### 3. Decentralization where it matters
-While some components exist for convenience (frontend, bot), they are **not trusted components**.
+While some components exist for convenience (frontend, indexer, bot), they are **not trusted components**.
 
 Critical actions:
 - buying tickets
@@ -133,6 +133,7 @@ This repository contains the following documentation files:
 - `06-security-model.md` — threat model & trust assumptions
 - `07-deployments.md` — deployment & operational model
 - `08-technical-references.md` — addresses, constants & external dependencies
+- `09-indexer.md` — indexer (The Graph) architecture & hybrid on-chain model
 
 Each document is intended to be readable on its own,  
 but together they describe the full system end-to-end.
