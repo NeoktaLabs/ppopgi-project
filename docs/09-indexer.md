@@ -9,7 +9,7 @@ The indexer exists to provide:
 - minimal RPC load on the frontend
 
 The indexer is intentionally **hybrid**:
-- **The Graph is used for lists + filters + history**
+- **The Graph is used for lists, filters, and history**
 - **On-chain reads remain the source of truth** for action-critical and user-specific data
 
 ---
@@ -26,8 +26,8 @@ The indexer is intentionally **hybrid**:
 - Keep UX fast while maintaining “code wins” transparency
 
 ### What the indexer should NOT try to replace
-- Per-user claimable balances (`claimableFunds`, `ticketsOwned`, `claimTicketRefund` status)
-- Real-time action gating (finalizable now, current allowance, current status if chain just updated)
+- Per-user claimable balances (`claimableFunds`, `ticketsOwned`, `claimableNative`)
+- Real-time action gating (finalizable now, allowance, paused state)
 - Any state that users are about to sign transactions based on
 
 ---
@@ -35,28 +35,30 @@ The indexer is intentionally **hybrid**:
 ## Hybrid model: what is indexed vs what is read on-chain
 
 ### Indexed (The Graph)
+
 Use The Graph for:
 - raffle discovery
-- immutable raffle metadata (or effectively immutable)
-- state transitions and final outcomes (winner/cancel)
-- global filter/sort fields
+- immutable or effectively immutable raffle metadata
+- lifecycle events (finalization, completion, cancellation)
+- global filter and sort fields
 
 **Indexer is the primary source for:**
 - browse pages
-- search/filter results
-- “past raffles” catalog
+- search and filter results
+- “past raffles” listings
 
 ### On-chain reads (RPC)
-Use on-chain reads for:
-- confirmation on the raffle details page (truth)
+
+Use direct on-chain reads for:
+- confirmation on the raffle details page
 - user-specific data:
   - `ticketsOwned[user]`
   - `claimableFunds[user]`
   - `claimableNative[user]`
-- approvals / allowance checks for USDC
-- finalize eligibility checks (deadline/maxTickets conditions can change with time)
+- allowance and approval checks for USDC
+- finalize eligibility (deadline, maxTickets, pause state)
 
-**Chain is always the source of truth** if indexer data is stale.
+**On-chain state always wins** if indexer data is stale or inconsistent.
 
 ---
 
@@ -69,16 +71,16 @@ The following data **MUST NOT** be relied upon from the indexer and **must alway
 - `claimableNative(address)`
 - per-user refund eligibility
 - per-user prize eligibility
-- current finalize eligibility (time-based or cap-based)
+- current finalize eligibility
 - allowance and approval state for USDC
 - any value that directly determines whether a user can safely sign a transaction
 
-These values are intentionally excluded from indexing to:
-- prevent stale or misleading UX
-- avoid incorrect user actions
+These values are intentionally excluded to:
+- avoid stale or misleading UX
+- prevent incorrect user actions
 - preserve the principle that **users act on on-chain truth only**
 
-The indexer is a **convenience and discovery layer**, not a transactional authority.
+The indexer is a **discovery and history layer**, not a transactional authority.
 
 ---
 
@@ -90,31 +92,35 @@ The indexer is a **convenience and discovery layer**, not a transactional author
 Used for canonical discovery and anti-spam registration.
 
 Key event:
-- `LotteryRegistered(index, typeId, lottery, creator)`
+- `LotteryRegistered(typeId, lottery, creator)`
 
 ---
 
 ### Factory / Deployer
 - `SingleWinnerDeployer`
 
-Used for rich “created raffle” metadata and factory defaults.
+Used for raffle creation metadata and factory defaults.
 
 Key events:
-- `LotteryDeployed(lottery, creator, winningPot, ticketPrice, name, usdc, entropy, entropyProvider, feeRecipient, protocolFeePercent, deadline, minTickets, maxTickets)`
-- `ConfigUpdated(usdc, entropy, provider, feeRecipient, protocolFeePercent)`
+- `LotteryDeployed(lottery, creator)`
+- `ConfigUpdated(usdc, entropy, entropyProvider, feeRecipient, protocolFeePercent)`
+
+> Note: the deployer is not a source of user funds and does not control raffle state after deployment.
 
 ---
 
 ### Lottery instances
-- `LotterySingleWinner` (many instances)
+- `LotterySingleWinner` (one subgraph data source per instance)
 
-Key events:
+Key lifecycle events:
 - `LotteryFinalized(requestId, totalSold, provider)`
 - `WinnerPicked(winner, winningTicketIndex, totalSold)`
 - `LotteryCanceled(reason, sold, ticketRevenue, potRefund)`
 
-Optional analytics event:
+Optional analytics event (non-authoritative):
 - `TicketsPurchased(buyer, count, totalCost, totalSold, rangeIndex, isNewRange)`
+
+> Analytics events must never be used for accounting, eligibility, or user balances.
 
 ---
 
@@ -122,49 +128,47 @@ Optional analytics event:
 
 ### Entity: `Raffle`
 
-A single deployed `LotterySingleWinner` instance.
+Represents one deployed `LotterySingleWinner` instance.
 
 Suggested fields:
 
 - `id`: `Bytes` (raffle contract address)
-- `typeId`: `BigInt` (e.g. `1` for Single Winner)
-- `registryIndex`: `BigInt` (from `LotteryRegistered.index`, optional)
+- `typeId`: `BigInt`
 - `creator`: `Bytes`
-- `deployer`: `Bytes` (the factory address)
+- `deployer`: `Bytes`
 - `name`: `String`
-- `createdAt`: `BigInt` (block timestamp)
-- `registeredAt`: `BigInt` (block timestamp, optional)
-- `deadline`: `BigInt` (seconds)
-- `ticketPrice`: `BigInt` (USDC 6 decimals)
-- `winningPot`: `BigInt` (USDC 6 decimals)
+- `createdAt`: `BigInt`
+- `registeredAt`: `BigInt` (optional)
+- `deadline`: `BigInt`
+- `ticketPrice`: `BigInt` (USDC, 6 decimals)
+- `winningPot`: `BigInt` (USDC, 6 decimals)
 - `minTickets`: `BigInt`
-- `maxTickets`: `BigInt` (0 means uncapped)
-- `protocolFeePercent`: `BigInt` (0–20)
+- `maxTickets`: `BigInt`
+- `protocolFeePercent`: `BigInt`
 - `feeRecipient`: `Bytes`
 - `usdc`: `Bytes`
 - `entropy`: `Bytes`
 - `entropyProvider`: `Bytes`
 
-State and results:
+Lifecycle & outcome:
 - `status`: `String` (`OPEN`, `DRAWING`, `COMPLETED`, `CANCELED`)
-- `winner`: `Bytes` (nullable until completed)
+- `winner`: `Bytes` (nullable)
 - `winningTicketIndex`: `BigInt` (optional)
-- `totalSoldAtFinalize`: `BigInt` (optional)
 - `finalizeRequestId`: `BigInt` (optional)
 - `selectedProvider`: `Bytes` (optional)
 - `canceledReason`: `String` (optional)
 - `canceledAt`: `BigInt` (optional)
 - `soldAtCancel`: `BigInt` (optional)
 
-Freshness:
+Indexing metadata:
 - `indexedAtBlock`: `BigInt`
 - `indexedAtTimestamp`: `BigInt`
 
 ---
 
-### Entity: `FactoryConfig` (optional but recommended)
+### Entity: `FactoryConfig` (optional)
 
-Tracks current factory defaults for the Create page.
+Tracks current deployer defaults for the Create page.
 
 - `id`: `Bytes` (factory address)
 - `usdc`: `Bytes`
@@ -180,19 +184,19 @@ Tracks current factory defaults for the Create page.
 ## Indexing strategy
 
 ### Canonical raffle creation
-Use `SingleWinnerDeployer.LotteryDeployed` as the primary metadata source.
+- Use `SingleWinnerDeployer.LotteryDeployed` as the authoritative creation signal.
 
 ### Registry registration
-Use `LotteryRegistry.LotteryRegistered` to attach canonical registry metadata.
+- Use `LotteryRegistry.LotteryRegistered` to confirm canonical status.
 
 ### Dynamic raffle templates
-Create a dynamic data source per raffle to index:
-- `LotteryFinalized`
-- `WinnerPicked`
-- `LotteryCanceled`
+- Create a dynamic data source per raffle to index lifecycle events:
+  - finalization
+  - completion
+  - cancellation
 
 ### Factory defaults
-Use `ConfigUpdated` to keep Create-page configuration in sync.
+- Track `ConfigUpdated` for Create-page transparency only.
 
 ---
 
@@ -204,9 +208,9 @@ Use `ConfigUpdated` to keep Create-page configuration in sync.
 - Optional freshness indicator
 
 ### Raffle details page
-- Subgraph for fast render
+- Subgraph for fast initial render
 - On-chain reads for confirmation
-- On-chain always wins on mismatch
+- On-chain state always wins on mismatch
 
 ### User-specific views
 - On-chain only
@@ -216,8 +220,25 @@ Use `ConfigUpdated` to keep Create-page configuration in sync.
 ## Handling indexer lag and reorgs
 
 - Indexer data is eventually consistent
-- Never gate user actions on indexer state
-- Always allow manual on-chain verification
+- Reorgs may temporarily surface stale data
+- User actions must never depend on indexer state
+
+The frontend should allow:
+- manual refresh
+- on-chain verification
+- graceful fallback to RPC
+
+---
+
+## Testing & correctness expectations
+
+The indexer is not part of the protocol’s security boundary.
+
+- Bugs in the indexer **cannot cause fund loss**
+- Incorrect indexer data must never enable or block transactions
+- Smart contract invariants are enforced on-chain and tested independently
+
+Indexer correctness is a UX concern, not a safety assumption.
 
 ---
 
