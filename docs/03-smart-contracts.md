@@ -9,6 +9,7 @@ It explains:
 - who can call what
 - how state transitions work
 - which invariants are enforced
+- how the contracts are tested
 - what limitations and tradeoffs exist
 
 The goal is **verifiability, not obscurity**.
@@ -157,9 +158,9 @@ Each instance represents **one raffle with exactly one winner**.
 
 ---
 
-## Lifecycle
+## Lifecycle & State Machine
 
-A raffle progresses through the following conceptual states:
+A raffle progresses through the following **strictly enforced** states:
 
 1. **FundingPending**
 2. **Open**
@@ -167,15 +168,15 @@ A raffle progresses through the following conceptual states:
 4. **Completed**
 5. **Canceled**
 
-State transitions are strictly enforced.
+Invalid transitions revert on-chain.
 
-> Note: naming reflects the on-chain enum values.
+State transitions are tested exhaustively.
 
 ---
 
 ## Funds model
 
-There are three distinct USDC pools:
+There are three distinct USDC accounting domains:
 
 1. **Prize pot**
    - Pre-funded by the creator
@@ -183,24 +184,88 @@ There are three distinct USDC pools:
 
 2. **Ticket revenue**
    - Paid by entrants
-   - Distributed at settlement or refunded on cancellation
+   - Distributed to creator and protocol on settlement
+   - Refunded to entrants on cancellation
 
-3. **Protocol fee**
-   - Carved out at settlement
+3. **Protocol fees**
+   - Derived from both prize pot and ticket revenue
    - Claimable by the protocol fee recipient
 
-USDC **never leaves the contract** except via explicit on-chain claims.
+USDC **never leaves the contract** except via explicit, pull-based user withdrawals.
+
+An internal accounting variable (`totalReservedUSDC`) tracks all outstanding liabilities
+and is continuously checked in tests and invariants.
 
 ---
 
-## Core invariants
+## Core invariants (enforced in code and tests)
 
-- The prize pot must be funded before the raffle opens
+The following properties must **always** hold:
+
+- The prize pot is fully funded before the raffle opens
 - Ticket price, caps, and deadlines are immutable
-- Randomness is requested at most once
-- Ticket count is frozen before randomness
-- Refunds are always available if the raffle is cancelled
-- Winner selection is deterministic from entropy output and ticket ranges
+- Ticket count is frozen before randomness is requested
+- Randomness can only be requested once
+- Winner selection is deterministic from entropy output
+- Sum of USDC claimables never exceeds contract balance
+- Native token claimables are always withdrawable
+- No function allows admin-controlled fund movement
+- No state transition skips required phases
+
+These invariants are validated using **Foundry invariant testing**.
+
+---
+
+## Testing & verification strategy
+
+The contracts are validated using a **defense-in-depth testing approach**.
+
+### Unit tests
+- Cover all user-visible flows:
+  - deployment
+  - ticket purchases
+  - finalization
+  - settlement
+  - cancellation
+  - refunds
+  - withdrawals
+- Cover all permission boundaries:
+  - owner-only
+  - creator-only
+  - public calls
+- Cover edge cases:
+  - deadlines
+  - min/max ticket thresholds
+  - insufficient fees
+  - repeated or invalid calls
+
+### Fuzz testing
+- Inputs such as ticket counts, timing, and call ordering are fuzzed
+- Adversarial call sequences are exercised automatically
+
+### Invariant testing (Foundry)
+Invariant tests assert **system-wide safety properties** across arbitrary execution paths, including:
+
+- **Solvency invariants**
+  - `USDC balance ≥ totalReservedUSDC`
+  - `native balance ≥ totalClaimableNative`
+
+- **State consistency**
+  - Only one active drawing at a time
+  - Drawing state implies a valid entropy request
+  - Completed or canceled raffles cannot re-enter active states
+
+- **Accounting integrity**
+  - Reserved USDC decreases only on withdrawals
+  - Claimable balances cannot be double-withdrawn
+  - Surplus sweeping cannot affect user claimables
+
+- **Registry consistency**
+  - Registered lotteries match deployer and creator metadata
+  - Registry never holds funds
+
+Invariant tests run continuously during fuzzing and must hold
+regardless of call order, timing, or participant behavior.
 
 ---
 
@@ -230,7 +295,7 @@ Requirements:
 - caller is not the creator
 - `count > 0`
 - total tickets sold + `count` ≤ `maxTickets`
-- per-wallet cap respected (if configured)
+- minimum purchase amount respected (if configured)
 
 #### Anti-spam rule (important)
 If the buyer is **not extending the latest ticket range**,  
@@ -240,6 +305,7 @@ This prevents griefing via tiny fragmented ticket ranges.
 
 Effects:
 - ticket ranges are appended or extended
+- ticket ownership is updated
 - `totalReservedUSDC` increases
 
 ---
@@ -252,22 +318,21 @@ Triggers winner selection or cancellation.
 - Caller must send enough native token to cover  
   `entropy.getFee(entropyProvider)`
 - `msg.value` must be **≥ required fee**
-- Overpayment is refunded immediately
-- If a refund fails, the amount becomes withdrawable via `withdrawNative()`
+- Overpayment is refunded or becomes claimable
 
 #### Behavior
 If **expired** and `ticketsSold < minTickets`:
 - raffle is cancelled
 - creator prize pot becomes claimable
-- **ticket refunds are claimable by entrants via `claimTicketRefund()`**
-- any entropy fee sent is returned or becomes withdrawable
+- ticket refunds are claimable by entrants
+- entropy fees are returned or claimable
 
 Otherwise:
 - transitions to `Drawing`
 - requests randomness
 - freezes ticket count
 
-> Calling `finalize()` does **not** immediately select a winner.
+Calling `finalize()` does **not** immediately select a winner.
 
 ---
 
@@ -277,6 +342,7 @@ Receives randomness from Entropy.
 
 Requirements:
 - callable only by the Entropy contract
+- request ID and provider must match
 - state must be `Drawing`
 
 Effects:
@@ -284,6 +350,8 @@ Effects:
 - resolves winning address via ticket ranges
 - allocates claimable balances
 - transitions to `Completed`
+
+Invalid or late callbacks are safely ignored.
 
 ---
 
@@ -293,16 +361,20 @@ USDC payouts are **pull-based**.
 
 Functions:
 - `withdrawFunds()`
-- `withdrawFundsTo(address to)`
 
 Refund allocation for cancelled raffles requires an explicit call by the entrant
 before withdrawal.
 
 ---
 
-### `withdrawNative()` / `withdrawNativeTo(address to)`
+### Native token handling
 
-Withdraws refundable native token (typically from entropy overpayment refunds).
+Native token (XTZ) is used for randomness fees.
+
+- Refunds are tracked per user
+- Failed refunds become claimable
+- Native surplus not owed to users is sweepable by governance
+- User claimables are always protected
 
 ---
 
@@ -310,7 +382,7 @@ Withdraws refundable native token (typically from entropy overpayment refunds).
 
 If the raffle is in `Drawing` and the entropy callback does not arrive:
 
-- creator or owner may cancel after a delay
+- creator or owner may cancel after a short delay
 - anyone may cancel after a longer delay
 
 This transitions the raffle to `Canceled` and enables refunds.
@@ -320,7 +392,7 @@ This transitions the raffle to `Canceled` and enables refunds.
 ## Security & transparency notes
 
 - No admin can change outcomes
-- No admin can drain funds
+- No admin can drain user funds
 - No backend can override results
 - All critical logic is enforced by code
 
