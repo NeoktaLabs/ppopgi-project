@@ -1,4 +1,4 @@
-# Ppopgi (뽑기) — Frontend UX Philosophy & Guarantees
+# Ppopgi (뽑기) — Frontend UX Philosophy & Guarantees (Revised with Indexer + Finalizer Bot + Fallback)
 
 ## 1. Purpose of this document
 
@@ -31,6 +31,53 @@ Randomness, time, and outcomes are treated as **facts**, not excitement generato
 
 ---
 
+## 2b. Fast UX, honest truth (Indexer + Bot + Fallback model)
+
+Ppopgi uses helpers to improve experience, **without creating dependencies**:
+- an **indexer** (for fast browsing and history)
+- a **finalizer bot** (to keep raffles moving)
+- an **automatic on-chain fallback** (to stay operational if helpers fail)
+
+None of these are trusted authorities.
+
+- The **indexer** makes lists and history fast  
+- The **bot** helps expired or sold-out raffles progress automatically  
+- The **fallback** ensures the app still works even if the indexer is unavailable  
+
+In all cases:
+- **on-chain state is the source of truth**
+- **users can always act manually**
+- **the app never controls outcomes**
+
+If helpers fail, lag, or are offline, the system still works.
+
+---
+
+## 2c. Automatic fallback guarantee (indexer failure)
+
+The frontend is designed to **never depend on the indexer for availability**.
+
+If the indexer:
+- is unreachable
+- returns errors
+- appears stale or inconsistent
+
+the frontend will:
+- **automatically fall back to direct on-chain reads**
+- reduce features to what can be safely shown via RPC
+- continue to allow all core actions (viewing raffles, buying tickets, finalizing, claiming)
+
+This may result in:
+- slower loading
+- reduced filtering or sorting
+- simpler list views
+
+But it will **never block participation**.
+
+This fallback is automatic and does not require user intervention.
+
+---
+
 ## 3. Practical UX rules for Etherlink participation
 
 The frontend should proactively prevent the most common “I’m stuck” moments.
@@ -47,7 +94,7 @@ To participate, users need:
 If either is missing, the UI should:
 - show a clear inline explanation
 - explain *why* the token is needed
-- link to bridging or acquisition instructions
+- link to acquisition instructions
 - avoid letting the user proceed blindly
 
 ---
@@ -76,7 +123,7 @@ The UI should:
 - explain that this fee is **not kept by the app**
 - clarify that any overpayment is refunded automatically **when possible**
 
-If an automatic refund cannot be delivered (for example, if the caller cannot receive native token),
+If an automatic refund cannot be delivered,
 the refundable amount becomes claimable and can be withdrawn manually.
 
 **Clarification**  
@@ -99,16 +146,32 @@ If a raffle is waiting on randomness, the UI should say so explicitly.
 
 ---
 
+### 4.1 Where state comes from (indexer, fallback, on-chain)
+
+To keep the app fast and reliable:
+- the **indexer** provides initial state for lists and history
+- the **fallback** activates automatically if the indexer is unavailable
+- the **raffle detail view always confirms critical state on-chain**
+
+This means:
+- a raffle may briefly look “Open” or “Drawing” while data refreshes
+- before any action, the frontend verifies the on-chain state
+
+If indexer data, fallback data, and on-chain data differ,  
+**on-chain data always wins**.
+
+---
+
 ### Winner display (transparency)
 
 Once a raffle is **Settled**, the UI should clearly display the winner on:
 - the raffle details view
-- raffle cards in “past” / “expired” browsing views
+- raffle cards in past / expired views
 
-This should be presented as factual state, not celebration:
-- show a truncated address (e.g. `0xABCD…1234`)
-- show the prize amount
-- provide a link to view the result on-chain when possible
+This should be presented as factual state:
+- truncated account (e.g. `0xABCD…1234`)
+- prize amount
+- proof link when possible
 
 The UI must not imply a winner exists before settlement.
 
@@ -116,121 +179,142 @@ The UI must not imply a winner exists before settlement.
 
 ### Progressive transparency (avoiding overload)
 
-Transparency should be provided through **progressive disclosure**.
+Transparency is provided through **progressive disclosure**.
 
 The frontend should:
-- keep raffle cards visually simple by default
-- surface only the most relevant information inline
-- expose detailed on-chain configuration via expandable sections or modals
+- keep raffle cards simple
+- show key facts first
+- expose deeper details via expandable sections or modals
 
-Advanced or rarely needed fields should be:
+Advanced details should be:
 - hidden by default
-- clearly labeled (e.g. “Safety info”, “How this works”, “On-chain details”)
+- clearly labeled (e.g. “Safety info”, “How this works”)
 - accessible without friction
-
-This ensures transparency without overwhelming users.
 
 ---
 
 ## 4b. Safety & Proof layer (trust without intimidation)
 
-To help users feel safe — especially around the draw — each raffle detail view must include a **small, clearly visible trust entry point** (for example, a shield icon labeled “Safety info”).
+Each raffle detail view includes a **clearly visible trust entry point**
+(e.g. a shield icon labeled “Safety info”).
 
-Clicking this opens a **compact “Safety & Proof” modal**.
+This opens a **compact “Safety & Proof” modal**.
 
 This modal exists to show that:
 - nothing is hidden
 - nothing is controlled off-chain
-- outcomes are verifiable facts, not promises
+- outcomes are verifiable facts
+
+---
 
 ### What the Safety & Proof modal should show
 
 #### A. “Who gets what”
-A simple breakdown in plain language:
+A simple breakdown:
 - **Winner gets:** X USDC  
-- **Creator gets:** Y USDC  
+- **Creator gets:** Y USDC (from ticket sales)  
 - **Ppopgi fee:** Z USDC (N%)
-- **Fee receiver (on-chain):** `0xABCD…1234` (copyable)
+- **Fee receiver:** `0xABCD…1234`
 
-This section should explicitly state:
+Include:
 > “These values are set on-chain and cannot be changed by the app.”
+
+For open raffles:
+- label creator earnings as **“so far”**
 
 ---
 
 #### B. “How the draw works”
-Explained calmly and factually:
-- When the raffle ends, anyone can request the draw.
-- The app asks an independent randomness provider for a random number.
-- A winner is picked only after that randomness arrives.
+Explained calmly:
+- When the raffle is finished (time ended **or sold out**), anyone can request the draw.
+- A randomness service is asked for a random number.
+- A winner is picked only after randomness arrives.
 
-Then show the real on-chain facts:
-- **Randomness provider (on-chain):** address
-- **Randomness contract:** address
-- **Request ID:** visible only when a draw is in progress
-- **Current draw state:** Open / Drawing / Settled / Cancelled
+Show factual details:
+- randomness provider
+- randomness system
+- request ID (only during drawing)
+- current state
+
+**Liveness note:**
+- If randomness does not return, the raffle can be canceled through an on-chain recovery path.
 
 ---
 
-#### C. “What the app cannot do”
-A short reassurance list:
+#### C. “Automatic finalization (helper bot)”
+
+- A helper bot may finalize raffles automatically to keep things moving.
+- The bot has **no special permissions**.
+- It only performs actions that any user can do manually.
+- If the bot is offline, users can still finalize themselves.
+
+Suggested copy:
+> “This raffle may be finalized automatically.  
+> The bot cannot choose winners or move funds.”
+
+---
+
+#### D. “What the app cannot do”
 - The app cannot pick the winner.
-- The app cannot change fees.
-- The app cannot redirect funds.
+- The app cannot change raffle rules after creation.
+- The app cannot change fees after creation.
+- The app cannot take prizes or refunds once they are owed.
 - Anyone can finalize a raffle — it does not depend on one operator.
 
+Clarify admin limits:
+- A designated safety owner can pause raffles and sweep **only extra deposits**, never owed funds.
+
 ---
 
-#### D. On-chain verification links
+#### E. Verification links
 Buttons such as:
-- “View raffle on-chain”
-- “View randomness provider”
-- “View fee receiver”
+- “View raffle proof”
+- “View randomness proof”
+- “View fee receiver proof”
 
-These should link to a block explorer, without over-emphasizing technical terms.
+These open proof views without technical intimidation.
 
 ---
 
 ## 5. Network mismatch UX (wrong chain)
 
 If the user is connected to the wrong network:
+- actions are blocked calmly
+- the UI explains the raffle exists on **Etherlink**
+- the user is guided to switch
 
-- the UI should block actions calmly
-- explain that the raffle exists on **Etherlink**
-- guide the user to switch networks without alarmist language
-
-The UI should treat this as a configuration issue, not an error.
+This is treated as configuration, not error.
 
 ---
 
 ## 6. Approval & multi-step action UX
 
-Some actions require multiple steps (for example, allowing coins, then buying tickets).
+Some actions require multiple steps.
 
 The frontend should:
-- explain when a preliminary step is required
-- clearly separate “Allow” from the final action
-- show progress across steps without implying failure
+- explain why a step is needed
+- separate “Allow” from the final action
+- show progress clearly
 
-Multi-step flows should feel intentional and safe,  
-not like something went wrong.
+Multi-step flows should feel intentional and safe.
 
 ---
 
-## 7. Finalization UX
+## 7. Finalization UX (with bot and fallback)
 
-Although a background bot exists, users should understand that:
-
+Users should understand that:
 - anyone can finalize a raffle
 - finalization is normal and permissionless
-- the raffle does not depend on a single operator
+- a helper bot may finalize automatically
+- the raffle does not depend on the bot or the indexer
 
-If the raffle is eligible for finalization:
-- the UI should show a clear “Finalize” action
-- the cost should be visible
-- fallback instructions should exist if automation fails
+If the raffle is eligible:
+- show a clear “Finalize” action
+- show the cost
+- allow manual finalization even if automation exists
 
-If randomness does not return, the raffle may remain in a drawing state  
-until an on-chain recovery path is used. The UI should reflect this honestly.
+Because of indexer lag or fallback mode:
+- the finalize button must always be gated by **on-chain checks at click time**
 
 ---
 
@@ -242,53 +326,46 @@ Claiming funds should feel:
 - predictable
 
 The frontend should:
-- show exactly what the user can claim
-- distinguish between prize, refund, and fee
-- explain why a claim is available or unavailable
-- avoid auto-claiming on the user’s behalf
+- show exactly what the user can claim (on-chain)
+- distinguish prize vs refund
+- explain why a claim exists
+- avoid auto-claiming
 
-Claims should always be:
+Claims are:
 - pull-based
 - user-initiated
 - idempotent
 
 **Refund clarification**  
 If a raffle is cancelled, ticket refunds must be explicitly claimed  
-by the user before withdrawal. Refunds are never pushed automatically.
+before withdrawal.
 
 ---
 
 ## 8b. Sharing & invitations UX
 
-Sharing a raffle is treated as an **invitation**, not a call to action.
+Sharing is an **invitation**, not a call to action.
 
-The frontend may offer sharing options:
-- after a raffle is created
-- on individual raffle views
-
-Sharing should feel:
-- optional
-- neutral
-- pressure-free
-
-Shared content should:
-- describe what the raffle *is*, not what it *promises*
-- use neutral language such as “View raffle” or “Join if interested”
+Sharing should:
+- feel optional
+- use neutral language
 - reflect only on-chain facts
 
 ---
 
 ## 9. Errors, reverts, and failure states
 
-Errors should be treated as part of the experience, not as edge cases.
+Errors are part of the experience.
 
 The UI should:
-- catch common failures locally when possible
-- display human-readable explanations
-- avoid generic “something went wrong” messages
+- catch common failures early
+- show human explanations
+- avoid vague errors
 
-If something cannot be explained clearly,  
-the UI should say what is known and what is not.
+For helper or indexer issues:
+- “This list may be slightly behind.”
+- “We’re loading directly from the network.”
+- provide refresh and proof options
 
 ---
 
@@ -297,26 +374,29 @@ the UI should say what is known and what is not.
 The frontend does **not** guarantee:
 - that a raffle will sell enough tickets
 - that randomness returns instantly
-- that energy costs are cheap or stable
+- that automation always runs
+- that the indexer is always available
+- that energy costs are stable
 - that users will win
 
 It guarantees only:
 - honest representation
-- accurate data
+- automatic fallback to on-chain data
+- on-chain verification for important actions
 - no hidden behavior
 
 ---
 
 ## 11. Replaceability is a feature
 
-The frontend is designed to be replaceable.
+The frontend is replaceable.
 
 Anyone can:
-- build an alternative UI
-- interact directly with the contracts
-- finalize raffles without permission
+- build another UI
+- interact directly with contracts
+- finalize raffles manually
 
-This is not a limitation — it is a safety feature.
+This is intentional and protective.
 
 ---
 
