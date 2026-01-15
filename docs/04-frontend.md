@@ -1,4 +1,4 @@
-# Ppopgi (뽑기) — Frontend Architecture & Guarantees
+# Ppopgi (뽑기) — Frontend Architecture & Guarantees (Updated)
 
 ## Purpose of this document
 
@@ -11,7 +11,22 @@ It is intentionally explicit about:
 - which assumptions it refuses to make
 
 The frontend is a **pure interface layer**.  
-It does not hold funds and does not influence outcomes.
+It does not hold funds, does not control outcomes, and does not create protocol dependencies.
+
+---
+
+## Core architectural principle
+
+The Ppopgi frontend follows a **three-layer helper model**:
+
+1. **On-chain contracts** — the only source of authority and truth  
+2. **Helpers (indexer + bot)** — convenience and performance only  
+3. **Frontend UI** — visualization, explanation, and safe interaction
+
+At all times:
+- **on-chain state wins**
+- helpers may fail without breaking the system
+- users can act manually
 
 ---
 
@@ -20,8 +35,8 @@ It does not hold funds and does not influence outcomes.
 To participate in a raffle on **Etherlink**, users must have **both**:
 
 - **XTZ on Etherlink**
-  - required for gas
-  - required to pay the **Entropy randomness fee** when finalizing
+  - required for energy costs
+  - required to pay the randomness fee when finalizing
 
 - **USDC on Etherlink**
   - required to buy raffle tickets
@@ -30,8 +45,8 @@ If a user has only one of these, participation is impossible.
 
 The frontend should:
 - detect missing prerequisites early
-- explain clearly what is missing
-- provide links to bridging or acquisition instructions
+- explain clearly what is missing and why
+- provide links to acquisition or bridging instructions
 - avoid letting users reach confusing reverts
 
 ---
@@ -49,189 +64,232 @@ This prevents griefing via tiny fragmented ticket ranges.
 
 The frontend should:
 - communicate this constraint in the ticket selection UI
-- validate locally before submitting the transaction
-- show a clear error message if the rule is violated
+- validate locally before submission
+- show a clear, human-readable error if the rule is violated
 
 ---
 
 ### Finalization requires a native payment
 
-Calling `finalize()` is **payable** because it must pay the Entropy fee.
+Finalization requires a small native payment because it must pay the randomness provider.
 
 The frontend should:
-- explain why finalization requires a small native payment
+- explain why finalization has a cost
 - show the estimated fee when possible
 - clarify that:
-  - overpayment is refunded automatically (when possible)
-  - if a refund fails (e.g. the caller cannot receive native token), it becomes withdrawable via `withdrawNative()`
-
-**Additional note (native surplus)**  
-Raffle contracts may also hold native token that is not explicitly owed to a user (e.g. accidental transfers).  
-This native surplus is not part of user claimables and may be swept by governance while preserving user withdrawals.
+  - overpayment is refunded automatically when possible
+  - if a refund fails (e.g. the caller cannot receive native token), it becomes withdrawable later
 
 **Clarification**  
-Calling `finalize()` does not immediately select a winner.  
+Calling finalize does **not** immediately select a winner.  
 It requests randomness and moves the raffle into a drawing state.  
-Winner selection and fund allocation occur later via the entropy callback.
+Winner selection and fund allocation occur later.
 
 ---
 
-## Bot is convenience, not trust
+## Indexer: performance helper, not authority
+
+An indexer is used to:
+- list raffles quickly
+- enable filtering and sorting
+- browse historical raffles efficiently
+
+The indexer:
+- is never required for correctness
+- never enables or blocks actions
+- is never trusted for user balances or permissions
+
+### Frontend guarantees with indexer usage
+
+- Lists and history are **indexer-first**
+- Raffle details **verify on-chain state**
+- User-specific data is **always read on-chain**
+- If indexer data disagrees with on-chain state, **on-chain state wins**
+
+---
+
+### Automatic fallback (indexer failure)
+
+The frontend must remain operational if the indexer:
+- is unreachable
+- returns errors
+- appears stale or inconsistent
+
+In this case, the frontend must:
+- automatically fall back to direct on-chain reads
+- reduce features safely (e.g. simpler lists, slower loading)
+- continue to allow all core actions:
+  - viewing raffles
+  - buying tickets
+  - finalizing
+  - claiming funds
+
+Fallback must be:
+- automatic
+- non-alarmist
+- transparent but calm
+
+The indexer is a **speed optimization**, not a dependency.
+
+---
+
+## Finalizer bot: convenience, not trust
 
 A background finalizer bot exists to:
-- monitor expired raffles
-- call `finalize()` automatically when possible
+- monitor expired or sold-out raffles
+- call finalize automatically when eligible
 
 However:
 - **anyone can finalize a raffle**
 - the bot has no special permissions
+- the bot cannot select winners or move funds
 - if the bot is offline, raffles still settle normally
 
-The frontend must always allow **manual finalization**.
+### Frontend requirement
+
+The frontend must:
+- always allow **manual finalization**
+- never imply the bot is required
+- never attribute authority or control to the bot
+
+Automation must feel **boring and optional**, not powerful.
 
 ---
 
-## Sharing & promotion (user-initiated)
+## Sharing & promotion (user-initiated only)
 
-The frontend may provide **explicit, user-initiated sharing tools** to help
-users share raffles with others and promote discovery of the platform.
+The frontend may provide **explicit, user-initiated sharing tools**.
 
 Sharing features may include:
-- a copyable raffle link
-- native OS share sheets (when available)
-- optional integrations with social platforms
+- copyable raffle links
+- native share dialogs
+- optional platform integrations
 
 ### Guarantees
 
-- Sharing is **always optional** and **never automatic**
-- The frontend never posts on behalf of a user
+- Sharing is always optional
+- Nothing is posted automatically
 - No wallet action is triggered by sharing
-- No endorsement, outcome, or winning probability is implied
+- No endorsement, outcome, or probability is implied
 
 ### Content constraints
 
 Shared content must:
 - reflect **on-chain facts only**
-- include neutral information (e.g. raffle title, deadline, ticket price)
-- avoid promotional or manipulative language (e.g. “guaranteed win”)
+- include neutral information (title, deadline, ticket price)
+- avoid promotional or manipulative language
 
-Sharing exists to invite others to **view or participate**,  
-not to pressure or mislead.
+Sharing exists to **invite**, not to pressure.
 
 ---
 
-## On-chain truth as the only source
+## On-chain truth as the only authority
 
-All displayed data comes from:
+All meaningful data ultimately comes from:
 - direct on-chain reads
 - verified contract events
-- deterministic derivations (e.g. countdown from deadline)
+- deterministic derivations (e.g. countdowns)
 
 The frontend:
 - does not simulate outcomes
-- does not invent progress
-- does not fabricate activity
+- does not invent activity
+- does not fabricate progress
 
-If the chain state is unknown, the UI should say so.
+If state is unknown or pending, the UI should say so.
 
 ---
 
-### Network & chain safety
+## Network & chain safety
 
 The frontend must detect the currently connected network.
 
 If the user is **not connected to Etherlink**:
 - write actions must be blocked
-- a clear explanation should be shown
-- the user should be prompted to switch networks
+- a clear explanation must be shown
+- the user should be guided to switch
 
-This prevents transactions from being sent on the wrong chain
-and avoids fund confusion.
-
----
-
-### Allowance visibility & approvals
-
-Because ticket purchases require USDC approval, the frontend should:
-
-- clearly display whether a USDC allowance already exists
-- explain when an approval transaction is required
-- distinguish clearly between:
-  - “Approve USDC”
-  - “Buy tickets”
-
-Approval visibility exists to reduce confusion and build trust.
-The frontend must not silently request approvals.
+This prevents accidental transactions on the wrong chain.
 
 ---
 
-### Transparency fields shown in the UI
+## Allowance visibility & approvals
 
-To improve trust and reduce support requests, the frontend should surface
-key configuration fields directly from on-chain contracts.
+Because ticket purchases require USDC allowance, the frontend should:
 
-#### On the Create page (read from the factory / deployer)
+- show whether an allowance already exists
+- explain when an approval step is required
+- clearly separate:
+  - allowing coins
+  - buying tickets
 
-- `protocolFeePercent`
-- `feeRecipient`
-- `usdc`
-- `entropy`
-- `entropyProvider`
-
-These values represent the **factory defaults** that will be applied to newly
-created raffles.
-
-#### On raffle cards and raffle details (read from the raffle contract)
-
-For both active and past raffles, the frontend should display:
-
-- `protocolFeePercent`
-- `feeRecipient`
-- `deployer`
-
-All addresses shown in the UI should link to the **Etherlink explorer**.
+The frontend must never silently request approvals.
 
 ---
 
-### Winner visibility for settled raffles
+## Transparency fields shown in the UI
 
-For transparency, once a raffle is **Settled/Completed**, the frontend should display:
-- the winning address (or truncated address)
-- the prize amount (USDC)
-- a link to the transaction or explorer view that proves settlement (when available)
+To reduce confusion and support requests, the frontend should surface
+important on-chain configuration.
 
-For raffles shown in “expired” / “past” lists, the raffle card should display the winner
-when the on-chain state indicates the raffle is settled.
+### On the Create page (from the factory)
 
-If a raffle is **Cancelled**, the UI must clearly indicate cancellation and refund
-availability instead of showing a winner.
+- fee percentage
+- fee receiver
+- USDC used
+- randomness system and provider
 
-The frontend must not display a winner for raffles that are still **Open** or **Drawing**.
+These represent the defaults applied to newly created raffles.
 
 ---
 
-### Fee transparency & previews
+### On raffle cards and raffle details
 
-Before submitting any transaction, the frontend should show:
-- the total USDC cost
-- any required approvals
-- estimated gas fees
-- the entropy fee (when finalizing)
+For active and past raffles, the frontend should display:
 
-This ensures users understand costs before signing and prevents
-hidden-fee misunderstandings.
+- fee percentage
+- fee receiver
+- deployer
+
+Addresses should link to an Etherlink proof view.
+
+---
+
+## Winner visibility for settled raffles
+
+Once a raffle is **Settled**:
+- show the winning account (truncated)
+- show the prize amount
+- provide a proof link when available
+
+For raffles shown in past / expired lists:
+- display the winner only when settled
+- display cancellation status clearly when canceled
+
+The frontend must never show a winner for raffles that are **Open** or **Drawing**.
+
+---
+
+## Fee transparency & previews
+
+Before any action, the frontend should show:
+- total USDC cost
+- required approvals
+- estimated energy cost
+- randomness fee (when finalizing)
+
+Costs must never be hidden or implied.
 
 ---
 
 ## No custody, no authority
 
 The frontend:
-- never takes custody of funds
+- never holds user funds
 - cannot block withdrawals
 - cannot change raffle rules
-- cannot change winners
+- cannot influence winners
 
-All authority resides in smart contracts.
+All authority resides in on-chain contracts.
 
 ---
 
@@ -243,13 +301,13 @@ If the frontend:
 - becomes outdated
 
 Users can still:
-- buy tickets directly via contracts
+- interact directly with contracts
 - finalize raffles manually
 - claim funds independently
 
 **Refund note**  
-If a raffle is cancelled, ticket refunds are **claimable** by users and must be
-explicitly withdrawn. Refunds are never pushed automatically by the frontend.
+If a raffle is cancelled, refunds are **claimable** and must be explicitly withdrawn.  
+They are never pushed automatically.
 
 The frontend is **replaceable by design**.
 
@@ -264,7 +322,7 @@ The frontend prioritizes:
 4. safety over convenience
 
 If something costs money or is irreversible,  
-the UI should say so plainly.
+the UI must say so plainly.
 
 ---
 
