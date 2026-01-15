@@ -40,7 +40,7 @@ When an address is not yet finalized, it is explicitly marked as **TBD**.
 | Role | Address | Notes |
 |----|-------|------|
 | Safe Owner (Multisig) | `0xe47fF5713ea90805B75bcDD93b888e076AeD9B2B` | Currently single signer |
-| Additional Signers | TBD | To be added if project grows |
+| Additional Signers | `0xdb4290CA291393FAD132Ee31a56eFbD392907021` | To be added if project grows |
 
 > The Safe owns the Registry, Deployer, and all deployed raffles.
 
@@ -50,7 +50,7 @@ When an address is not yet finalized, it is explicitly marked as **TBD**.
 
 | Item | Address | Notes |
 |----|--------|------|
-| Protocol Fee Recipient | TBD | External treasury wallet |
+| Protocol Fee Recipient | `0xdb4290CA291393FAD132Ee31a56eFbD392907021` | External treasury wallet |
 
 > Fee recipient is **immutable per raffle instance**.
 
@@ -62,8 +62,8 @@ When an address is not yet finalized, it is explicitly marked as **TBD**.
 
 | Contract | Address | Status |
 |--------|---------|--------|
-| LotteryRegistry | `0xE26d8B29d116540C7B181389D8e5a4990E41BcB5` | Deployed |
-| SingleWinnerDeployer | `0x6ce44c2c89779F8f20deB1435B99a96d29Cd21C3` | Deployed |
+| LotteryRegistry | `0x1CD24E0C49b1B61ff07be12fBa3ce58eCb20b098` | Deployed |
+| SingleWinnerDeployer | `0x6050196520e7010Aa39C8671055B674851E2426D` | Deployed |
 
 ---
 
@@ -117,7 +117,7 @@ When an address is not yet finalized, it is explicitly marked as **TBD**.
 | `VITE_CHAIN_ID` | Network enforcement | `42793` |
 | `VITE_REGISTRY_ADDRESS` | Registry contract | See section 4 |
 | `VITE_DEPLOYER_ADDRESS` | Factory contract | See section 4 |
-| `VITE_WC_PROJECT_ID` | WalletConnect | TBD |
+| `VITE_WC_PROJECT_ID` | WalletConnect | de1cc632ebba98cdb5ea9a57c00ded18 |
 
 ---
 
@@ -162,7 +162,7 @@ When an address is not yet finalized, it is explicitly marked as **TBD**.
 |------|----------|------|
 | RPC | Etherlink | Public RPC |
 | Hosting | Cloudflare | Pages + Workers |
-| Wallet Connect | WalletConnect | Project ID TBD |
+| Wallet Connect | WalletConnect | Project ID |
 | Oracle | Pyth Network | Entropy randomness |
 
 ---
